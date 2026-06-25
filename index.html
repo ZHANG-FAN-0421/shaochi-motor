@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>紹馳車業｜維修管理系統 v14.0 Preview</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<section id="login" class="login">
+ <div class="login-card"><div class="logo">紹</div><h1>紹馳車業</h1><p>維修管理系統 v14.0 Preview</p>
+ <form id="loginForm"><label>帳號</label><input id="user" required><label>密碼</label><input id="pass" type="password" required><button type="submit" style="width:100%;margin-top:12px">登入</button></form><div id="loginMsg" class="msg"></div></div>
+</section>
+
+<section id="app" class="app hide">
+ <aside id="side" class="side">
+  <div class="brand"><div class="logo">紹</div><div><b>紹馳車業</b><small>Repair System</small></div></div>
+  <button data-page="receive" class="active">接車建單</button>
+  <button data-page="orders">工單管理</button>
+  <button data-page="quotes">估價單管理</button>
+  <button data-page="items">項目管理</button>
+  <button data-page="history">歷史維修</button>
+  <button data-page="customers">客戶車輛</button>
+  <button data-page="money">營收備份</button>
+  <button data-page="syncTest">雲端同步</button>
+  <button id="logout" class="logout">登出</button>
+ </aside>
+ <div id="overlay" class="overlay"></div>
+ <div class="main"><header class="top"><button id="menu" class="menu">☰</button><div><small>SHAO CHI TECH</small><h1 id="title">接車建單</h1></div></header>
+ <main>
+
+<div id="syncTestPanelV104" class="sync-test-panel-v104 hide">
+  <div class="card">
+    <h2>Google Sheets 雲端同步</h2>
+    <label>API 網址</label>
+    <input id="cloudApiUrlV108" value="https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5R1WuM9tJN1wt3rnWczF0MOerC3RqmPtSdpg2BqsxAFU8MHZMG3-xw/exec" placeholder="Google Apps Script Web App URL">
+
+    <div class="sync-test-actions-v104">
+      <button id="cloudPingV108" type="button">測試連線</button>
+      <button id="cloudUploadV108" type="button" class="secondary">上傳本機資料</button>
+      <button id="cloudDownloadV108" type="button" class="secondary">下載雲端資料</button>
+      <button id="cloudClearV108" type="button" class="secondary">清除結果</button>
+    </div>
+
+    <div id="cloudStatusV108" class="notice" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>同步結果</h2>
+    <div id="cloudResultV108" class="muted"></div>
+  </div>
+</div>
+
+<div id="threePageMount" class="three-mount hide">
+  <div id="threePageContent"></div>
+</div>
+
+<section id="receive" class="page active">
+   <div class="card"><h2>1. 輸入車牌與公里數</h2>
+    <form id="step1">
+      <input id="plate" placeholder="車牌，例如 NMY6671" maxlength="8" required>
+      <input id="km" type="number" min="0" placeholder="公里數，例如 12800" required>
+      <button type="submit">下一步：維修項目</button>
+      <p id="foundMsg" class="notice"></p>
+      <div id="oldCustomerBox" class="hide" style="margin-top:10px;background:#020617;border:1px solid #334155;border-radius:16px;padding:12px;color:#f8fafc"></div>
+    </form>
+
+    <form id="step2" class="hide">
+      <div class="head-row">
+        <div class="head-box plate-history-trigger" id="plateHistoryBtn"><div class="head-box-label">車牌｜點一下看歷史</div><div id="showPlate" class="head-plate">---</div></div>
+        <div class="head-box"><div class="head-box-label">公里數</div><div class="km-wrap"><input id="editKm" type="number" min="0" placeholder="公里數"><span class="km-unit">KM</span></div></div>
+      </div>
+
+      <div id="lockedCustomerBox" class="customer-lock-box hide"><div class="customer-line" id="lockedCustomerLine"></div></div>
+      <div id="customerInputBox">
+        <input id="custName" placeholder="客戶姓名" required>
+        <input id="custPhone" placeholder="電話">
+        <div class="row"><input id="custModel" placeholder="車種"><input id="custYear" placeholder="年份"></div>
+        <input id="custColor" placeholder="顏色">
+        <button type="button" id="confirmCustomerBtn" class="customer-confirm">確定客戶資料</button>
+      </div>
+
+      <div id="workArea" class="work-area locked">
+        <div class="card" style="padding:12px;margin:8px 0;background:#0b1220">
+          <h3 style="margin:0 0 8px">零件快速加入</h3>
+          <div id="partsTabs" class="parts-tabs"></div>
+          <div id="partsGrid" class="parts-grid"></div>
+          <div id="selectedParts" class="selected-parts"></div>
+          <button type="button" id="addCustomItem" class="add-custom-item">＋ 新增維修項目</button>
+          <div class="parts-total"><b>零件小計</b><b id="partsTotal">$0</b></div>
+        </div>
+
+        <label class="note-label">備註</label>
+        <textarea id="note" placeholder="備註：客人交代事項、特殊狀況、下次提醒"></textarea>
+
+        <div class="money-panel">
+          <div class="money-row"><span>零件小計</span><b id="calcPartsTotal">$0</b></div>
+          <div class="money-inputs">
+            <div><label>工資</label><input id="laborCost" type="number" min="0" value="0" placeholder="工資"></div>
+            <div><label>已付金額</label><input id="paidAmount" type="number" min="0" value="0" placeholder="已付金額"></div>
+          </div>
+          <div class="money-row total"><span>總金額</span><b id="calcGrandTotal">$0</b></div>
+          <div class="money-row"><span>未付金額</span><b id="calcRemainTotal">$0</b></div>
+        </div>
+
+        <select id="orderType"><option value="工單">正式工單</option><option value="估價單">估價單</option></select>
+      </div>
+      <div class="row"><button type="button" id="back" class="secondary">上一步</button><button type="button" id="createOrderBtn">完成建立</button></div>
+    </form>
+   </div>
+   <div class="card"><h2>快速搜尋</h2><input id="search" placeholder="輸入車牌 / 姓名 / 電話"><div id="searchList" class="list"></div></div>
+  </section>
+
+  <section id="orders" class="page"><div class="card"><h2>工單管理</h2><div id="createSuccessMsg" class="notice hide">工單已建立</div><div id="orderList" class="list"></div></div></section>
+  <section id="quotes" class="page"><div class="card"><h2>估價單管理</h2><p class="muted">估價單會獨立顯示，可修改、刪除，或轉成正式工單。</p><div id="quoteSuccessMsg" class="notice hide">估價單已建立</div><div id="quoteList" class="list"></div></div></section>
+  <section id="items" class="page">
+    <div class="card">
+      <h2>項目管理</h2>
+      <p class="muted">這裡管理快速加入的大項、小項與預設價格。v10 項目管理使用固定 ID，刪除採兩段式確認。</p>
+
+      <div class="card" style="background:#0b1220;padding:12px">
+        <h3>新增大項</h3>
+        <div class="row">
+          <input id="v10NewCatName" placeholder="大項名稱，例如 精品 / 引擎 / 外觀">
+          <button id="v10AddCatBtn" type="button">新增大項</button>
+        </div>
+      </div>
+
+      <div class="card" style="background:#0b1220;padding:12px">
+        <h3>新增小項</h3>
+        <label>選擇大項</label>
+        <select id="v10ItemCatSelect"></select>
+        <div class="row">
+          <input id="v10NewItemName" placeholder="小項名稱，例如 機油 / 煞車皮">
+          <input id="v10NewItemPrice" type="number" min="0" placeholder="預設價格">
+        </div>
+        <button id="v10AddItemBtn" type="button" style="width:100%;margin-top:8px">新增小項</button>
+      </div>
+
+      <div id="itemManagerList" class="list"></div>
+    </div>
+  
+  <section id="history" class="page"><div class="card"><h2>查歷史維修</h2><div class="row"><input id="historyPlate" placeholder="輸入車牌"><button id="historyBtn">歷史維修</button></div><div id="historyList" class="list"></div></div></section>
+  <section id="customers" class="page"><div class="card"><h2>客戶車輛資料</h2><div id="customerList" class="list"></div></div></section>
+  <section id="money" class="page"><div class="card"><h2>營收備份</h2><p class="muted">估價單不列入營收。</p><h2 id="revenue">$0</h2><p id="stats" class="muted"></p><button id="export">複製備份</button><textarea id="importBox" placeholder="貼上備份 JSON"></textarea><button id="import" class="secondary">匯入</button></div></section>
+ </main></div>
+</section>
+<script src="js/app.js"></script>
+<div id="plateHistoryModal" class="history-modal hide">
+  <div class="history-panel">
+    <div class="history-panel-head">
+      <div>
+        <h2 id="plateHistoryTitle">歷史維修</h2>
+        <p class="muted">看完按返回接車，不會離開目前建單畫面。</p>
+      </div>
+      <button type="button" id="closePlateHistory" class="history-close">返回接車</button>
+    </div>
+    <div id="plateHistoryList"></div>
+  </div>
+</div>
+
+
+<div id="editOrderModal" class="edit-modal hide">
+  <div class="edit-panel">
+    <div class="edit-head">
+      <div>
+        <h2>修改工單</h2>
+        <p id="editOrderInfo" class="muted"></p>
+      </div>
+      <button type="button" id="closeEditOrder" class="edit-close">返回</button>
+    </div>
+
+    
+<div class="card" style="padding:12px;margin:8px 0;background:#0b1220">
+  <h3 style="margin:0 0 8px">零件快速加入</h3>
+  <div id="editPartsTabs" class="parts-tabs"></div>
+  <div id="editPartsGrid" class="parts-grid"></div>
+</div>
+<div id="editItemsList"></div>
+
+    <button type="button" id="editAddItem" class="add-custom-item">＋ 新增維修項目</button>
+
+    <label class="note-label">備註</label>
+    <textarea id="editNote" placeholder="備註"></textarea>
+
+    <div class="edit-money">
+      <div class="edit-money-row"><span>零件小計</span><b id="editPartsTotal">$0</b></div>
+      <div class="edit-money-inputs">
+        <div><label>工資</label><input id="editLaborCost" type="number" min="0" value="0"></div>
+        <div><label>已付金額</label><input id="editPaidAmount" type="number" min="0" value="0"></div>
+      </div>
+      <div class="edit-money-row total"><span>總金額</span><b id="editGrandTotal">$0</b></div>
+      <div class="edit-money-row"><span>未付金額</span><b id="editRemainTotal">$0</b></div>
+    </div>
+
+    <button type="button" id="saveEditOrderV85" class="edit-save">儲存修改</button>
+  </div>
+</div>
+
+
+<div id="customerEditModal" class="customer-edit-modal hide">
+  <div class="customer-edit-panel">
+    <div class="customer-edit-head">
+      <div>
+        <h2>修改客戶資料</h2>
+        <p id="customerEditPlate" class="muted"></p>
+      </div>
+      <button type="button" id="closeCustomerEdit" class="customer-edit-close">返回</button>
+    </div>
+
+    <label>姓名</label>
+    <input id="editCustomerName" placeholder="姓名">
+
+    <label>電話</label>
+    <input id="editCustomerPhone" placeholder="電話">
+
+    <label>車種</label>
+    <input id="editCustomerModel" placeholder="車種">
+
+    <div class="row">
+      <div><label>年份</label><input id="editCustomerYear" placeholder="年份"></div>
+      <div><label>顏色</label><input id="editCustomerColor" placeholder="顏色"></div>
+    </div>
+
+    <button type="button" id="saveCustomerEdit" class="customer-edit-save">儲存客戶資料</button>
+  </div>
+</div>
+<script src="js/app.js"></script>
+<div id="printPreviewModal" class="hide">
+  <div class="print-preview-actions">
+    <button id="closePrintPreview">返回</button>
+    <button id="copyPrintText" class="green">複製文字</button>
+    <button id="trySystemPrint">嘗試系統列印</button>
+  </div>
+  <div id="printPreviewContent"></div>
+</div>
+<script src="js/app.js"></script>
+<div id="orderSyncToastV111"></div>
+<script src="js/app.js"></script>
+</body>
+</html>
