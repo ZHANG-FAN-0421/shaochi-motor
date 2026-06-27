@@ -551,7 +551,20 @@ function renderItemManager() {
         <div class="minor-list">
           ${activeItems.map(item => {
             const index = db.catalog.indexOf(item);
-            return `<div class="minor-item"><input class="catalog-name" data-index="${index}" value="${esc(item.name)}"><input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}"><button type="button" class="catalog-del deleteItem" data-index="${index}">刪除</button></div>`;
+            return `<div class="minor-item compact" data-index="${index}">
+              <div class="minor-display">
+                <b>${esc(item.name)}</b>
+                <span>${money(Number(item.price || 0))}</span>
+              </div>
+              <div class="minor-edit-fields">
+                <input class="catalog-name" data-index="${index}" value="${esc(item.name)}">
+                <input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}">
+              </div>
+              <div class="minor-actions">
+                <button type="button" class="secondary toggleMinorEdit" data-index="${index}">修改</button>
+                <button type="button" class="catalog-del deleteItem" data-index="${index}">刪除</button>
+              </div>
+            </div>`;
           }).join("") || `<div class="minor-empty">這個大項目還沒有小項目</div>`}
         </div>
       </section>
@@ -938,6 +951,12 @@ document.addEventListener("click", event => {
   if (deleteItem) {
     db.catalog.splice(Number(deleteItem.dataset.index), 1);
     save();
+  }
+  const toggleMinorEdit = event.target.closest(".toggleMinorEdit");
+  if (toggleMinorEdit) {
+    const row = toggleMinorEdit.closest(".minor-item");
+    const editing = row.classList.toggle("editing");
+    toggleMinorEdit.textContent = editing ? "完成" : "修改";
   }
   const selectCat = event.target.closest(".selectCat");
   if (selectCat) {
