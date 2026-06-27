@@ -956,7 +956,16 @@ document.addEventListener("click", event => {
   if (toggleMinorEdit) {
     const row = toggleMinorEdit.closest(".minor-item");
     const editing = row.classList.toggle("editing");
+    row.classList.add("selected");
     toggleMinorEdit.textContent = editing ? "完成" : "修改";
+  }
+  const minorItem = event.target.closest(".minor-item");
+  if (minorItem && !event.target.closest("button,input")) {
+    const wasSelected = minorItem.classList.contains("selected");
+    $$(".minor-item.selected").forEach(row => {
+      if (row !== minorItem && !row.classList.contains("editing")) row.classList.remove("selected");
+    });
+    minorItem.classList.toggle("selected", !wasSelected);
   }
   const selectCat = event.target.closest(".selectCat");
   if (selectCat) {
