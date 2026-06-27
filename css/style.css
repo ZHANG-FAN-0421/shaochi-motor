@@ -384,3 +384,146 @@ main{max-width:1080px;margin:auto;padding:16px}.page{display:none}.page.active{d
 .cost-internal-v131 input{width:100%;min-height:46px;border-radius:12px;font-size:16px}
 .cost-hint-v131{color:#94a3b8;font-size:12px;margin-top:5px}
 .rev-profit-v131{margin-top:8px;color:#fbbf24;font-weight:900;line-height:1.5}
+
+/* Customer cards */
+.customer-card{
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:12px;
+  margin:8px 0;
+  color:#f8fafc;
+}
+.customer-card h3{
+  margin:0 0 8px;
+  font-size:18px;
+  line-height:1.25;
+}
+.customer-card p{
+  margin:3px 0;
+  color:#93c5fd;
+  font-size:13px;
+  line-height:1.45;
+}
+.customer-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.customer-actions button{
+  padding:9px 12px!important;
+  border-radius:12px!important;
+  background:#334155!important;
+  color:#fff!important;
+  font-weight:900;
+}
+.customer-actions .danger{
+  background:#dc2626!important;
+  color:#fff!important;
+}
+
+/* Order management cards */
+.order-filter{
+  background:#111827;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:12px;
+  margin:0 0 12px;
+}
+.order-filter label,
+.order-status-box label{
+  display:block;
+  color:#93c5fd;
+  font-size:13px;
+  font-weight:900;
+  margin:0 0 6px;
+}
+.order-card{
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:14px;
+  margin:8px 0;
+  color:#f8fafc;
+}
+.order-card h3{
+  margin:0 0 10px;
+  font-size:19px;
+  line-height:1.25;
+}
+.order-card p{
+  margin:9px 0 4px;
+  color:#93c5fd;
+  font-size:13px;
+}
+.order-status-badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  border-radius:999px;
+  padding:5px 9px;
+  background:#312e81;
+  color:#ddd6fe;
+  border:1px solid #8b5cf6;
+  font-size:12px;
+  font-weight:900;
+}
+.order-items{
+  margin-top:6px;
+  color:#fff;
+  font-size:14px;
+  font-weight:800;
+  line-height:1.5;
+}
+.order-money{
+  margin-top:4px;
+  color:#f8fafc;
+  font-size:15px;
+  font-weight:900;
+}
+.paid-chip{
+  display:inline-flex;
+  margin-left:6px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:#166534;
+  color:#86efac;
+  font-size:12px;
+}
+.paid-chip.unpaid{
+  background:#7f1d1d;
+  color:#fecaca;
+}
+.order-status-box{
+  border:1px solid #334155;
+  border-radius:12px;
+  padding:10px;
+  margin-top:12px;
+}
+.order-status-box select,
+.order-filter select{
+  min-height:44px;
+  margin:0;
+}
+.order-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.order-actions button{
+  padding:9px 12px!important;
+  border-radius:12px!important;
+  background:#334155!important;
+  color:#fff!important;
+  font-weight:900;
+}
+.order-actions .green{
+  background:#22c55e!important;
+  color:#052e16!important;
+}
+.order-actions .danger{
+  background:#dc2626!important;
+  color:#fff!important;
+}
