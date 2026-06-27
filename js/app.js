@@ -2,6 +2,7 @@ const USER = "Zhangfan";
 const PASS = "zhangfan0421";
 const KEY = "shaochi_v14_data";
 const LOGIN = "shaochi_v14_login";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5R1WuM9tJN1wt3rnWczF0MOerC3RqmPtSdpg2BqsxAFU8MHZMG3-xw/exec";
 const SYNC_URL = "shaochi_cloud_api_url";
 const SYNC_AUTO = "shaochi_cloud_auto_sync";
 const SYNC_LAST = "shaochi_cloud_last_sync";
@@ -342,7 +343,7 @@ function renderCloudSettings() {
   const autoInput = $("#cloudAutoSync");
   const last = $("#cloudLastSync");
   if (!urlInput || !autoInput || !last) return;
-  if (document.activeElement !== urlInput) urlInput.value = localStorage.getItem(SYNC_URL) || "";
+  if (document.activeElement !== urlInput) urlInput.value = getCloudUrl();
   autoInput.checked = localStorage.getItem(SYNC_AUTO) === "1";
   const lastSync = localStorage.getItem(SYNC_LAST);
   last.textContent = lastSync ? `最後同步：${new Date(lastSync).toLocaleString("zh-TW")}` : "尚未同步";
@@ -449,7 +450,7 @@ function setCloudStatus(message, type = "") {
 }
 
 function getCloudUrl() {
-  return (localStorage.getItem(SYNC_URL) || "").trim();
+  return (localStorage.getItem(SYNC_URL) || DEFAULT_SYNC_URL).trim();
 }
 
 function isAutoSyncOn() {
@@ -484,10 +485,11 @@ async function cloudUpload(options = {}) {
     if (!options.silent) setCloudStatus("正在上傳到雲端...");
     const response = await fetch(url, {
       method: "POST",
-      body: JSON.stringify({ action: "upload", ...cloudPayload() })
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "saveAll", data: cloudPayload().data })
     });
-    const text = await response.text();
-    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+    const payload = await response.json();
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
     renderCloudSettings();
     if (!options.silent) setCloudStatus("已上傳到雲端", "ok");
@@ -507,9 +509,9 @@ async function cloudDownload(options = {}) {
   try {
     if (!options.silent) setCloudStatus("正在從雲端下載...");
     const joiner = url.includes("?") ? "&" : "?";
-    const response = await fetch(`${url}${joiner}action=download&t=${Date.now()}`);
+    const response = await fetch(`${url}${joiner}action=getAll&t=${Date.now()}`);
     const payload = await response.json();
-    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
     applyingCloudData = true;
     db = normalizeCloudResponse(payload);
     localStorage.setItem(KEY, JSON.stringify(db));
@@ -521,6 +523,22 @@ async function cloudDownload(options = {}) {
   } catch (error) {
     applyingCloudData = false;
     setCloudStatus(`下載失敗：${error.message}`, "error");
+    return false;
+  }
+}
+
+async function cloudPing() {
+  const url = getCloudUrl();
+  try {
+    setCloudStatus("正在測試連線...");
+    const joiner = url.includes("?") ? "&" : "?";
+    const response = await fetch(`${url}${joiner}action=ping&t=${Date.now()}`);
+    const payload = await response.json();
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+    setCloudStatus(payload.message || "雲端連線正常", "ok");
+    return true;
+  } catch (error) {
+    setCloudStatus(`連線失敗：${error.message}`, "error");
     return false;
   }
 }
@@ -679,6 +697,7 @@ document.addEventListener("click", event => {
   }
   if (event.target.closest("#export")) exportData();
   if (event.target.closest("#import")) importData();
+  if (event.target.closest("#cloudPingNow")) cloudPing();
   if (event.target.closest("#cloudUploadNow")) cloudUpload();
   if (event.target.closest("#cloudDownloadNow")) cloudDownload();
 });
