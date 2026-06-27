@@ -90,6 +90,27 @@ main{max-width:1080px;margin:auto;padding:16px}.page{display:none}.page.active{d
 .catalog-cat-btn.active{border-color:#f59e0b!important;color:#f59e0b!important}
 .catalog-cat-body{background:#020617;border:1px solid #334155;border-radius:18px;padding:12px;margin:8px 0 14px}
 
+/* Item maintenance */
+.item-maintenance{display:grid;grid-template-columns:280px 1fr;gap:12px}
+.major-panel,.minor-panel{background:#0b1220;border:1px solid #334155;border-radius:18px;padding:12px;min-width:0}
+.item-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.item-panel-head h3{margin:0}
+.item-panel-head span{color:#94a3b8;font-size:13px;font-weight:900}
+.major-list{display:grid;gap:8px;margin-bottom:12px}
+.major-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#020617!important;color:#f8fafc!important;border:1px solid #334155!important;text-align:left!important;padding:13px!important}
+.major-btn.active{border-color:#f59e0b!important;background:#f59e0b!important;color:#111827!important}
+.major-btn span{font-size:13px;white-space:nowrap}
+.major-add{display:grid;gap:8px}
+.major-add input,.minor-add input{margin:0}
+.minor-add{display:grid;grid-template-columns:1fr 130px 150px;gap:8px;margin:10px 0 12px}
+.minor-add button{white-space:nowrap}
+.hidden-select{display:none!important}
+.minor-list{display:grid;gap:8px}
+.minor-item{display:grid;grid-template-columns:1fr 120px 74px;gap:8px;align-items:center;background:#020617;border:1px solid #334155;border-radius:14px;padding:10px}
+.minor-item input{margin:0}
+.minor-empty{background:#020617;border:1px dashed #334155;border-radius:14px;padding:18px;color:#94a3b8;text-align:center;font-weight:800}
+@media(max-width:780px){.item-maintenance{grid-template-columns:1fr}.minor-add,.minor-item{grid-template-columns:1fr}.major-panel,.minor-panel{padding:10px}}
+
 
 .sort-control-box{background:#0b1220;border:1px solid #334155;border-radius:16px;padding:12px;margin:10px 0}
 .sort-control-row{display:grid;grid-template-columns:1fr 90px 90px;gap:8px;align-items:center}
