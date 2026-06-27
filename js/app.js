@@ -56,7 +56,7 @@ const pageTitles = {
   receive: "接車開單",
   orders: "維修工單",
   quotes: "估價單",
-  items: "品項管理",
+  items: "項目維護",
   history: "維修紀錄",
   customers: "客戶車輛",
   money: "營收統計",
@@ -166,7 +166,7 @@ function renderSelectedParts() {
   $("#selectedParts").innerHTML = selectedParts.map((item, index) => `
     <div class="part-row">
       <div class="part-row-top">
-        <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="品項名稱">
+        <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱">
         <div class="part-row-subtotal">${money(Number(item.price || 0) * Number(item.qty || 1))}</div>
       </div>
       <div class="part-controls">
@@ -512,23 +512,51 @@ function printOrder(id) {
 }
 
 function renderItemManager() {
-  const select = $("#itemCatSelect");
   const list = $("#itemManagerList");
-  if (!select || !list) return;
+  if (!list) return;
   const cats = getPartCats();
   if (!currentPartCat || !cats.includes(currentPartCat)) currentPartCat = cats[0] || "";
-  select.innerHTML = cats.map(cat => `<option value="${esc(cat)}" ${cat === currentPartCat ? "selected" : ""}>${esc(cat)}</option>`).join("");
-  list.innerHTML = cats.map(cat => `
-    <div class="catalog-cat">
-      <div class="catalog-cat-head"><h3>${esc(cat)}</h3><button type="button" class="secondary selectCat" data-cat="${esc(cat)}">使用</button></div>
-      <div class="catalog-items">
-        ${db.catalog.filter(item => item.cat === cat).map(item => {
-          const index = db.catalog.indexOf(item);
-          return `<div class="catalog-item"><div class="catalog-item-row"><input class="catalog-name" data-index="${index}" value="${esc(item.name)}"><input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}"><button type="button" class="catalog-del deleteItem" data-index="${index}">刪除</button></div></div>`;
-        }).join("") || `<p class="muted">沒有品項</p>`}
-      </div>
+  const activeItems = db.catalog.filter(item => item.cat === currentPartCat);
+  list.innerHTML = `
+    <div class="item-maintenance">
+      <aside class="major-panel">
+        <div class="item-panel-head">
+          <h3>大項目</h3>
+          <span>${cats.length} 類</span>
+        </div>
+        <div class="major-list">
+          ${cats.map(cat => {
+            const count = db.catalog.filter(item => item.cat === cat).length;
+            return `<button type="button" class="major-btn selectCat ${cat === currentPartCat ? "active" : ""}" data-cat="${esc(cat)}"><b>${esc(cat)}</b><span>${count} 項</span></button>`;
+          }).join("") || `<p class="muted">尚無大項目</p>`}
+        </div>
+        <div class="major-add">
+          <input id="newCatName" placeholder="新增大項目，例如 油品 / 傳動 / 煞車">
+          <button id="addCatBtn" type="button">新增大項目</button>
+        </div>
+      </aside>
+      <section class="minor-panel">
+        <div class="item-panel-head">
+          <h3>${currentPartCat ? esc(currentPartCat) : "小項目"}</h3>
+          <span>${activeItems.length} 項</span>
+        </div>
+        <select id="itemCatSelect" class="hidden-select" aria-label="目前大項目">
+          ${cats.map(cat => `<option value="${esc(cat)}" ${cat === currentPartCat ? "selected" : ""}>${esc(cat)}</option>`).join("")}
+        </select>
+        <div class="minor-add">
+          <input id="newItemName" placeholder="新增小項目，例如 機油 / 煞車皮">
+          <input id="newItemPrice" type="number" min="0" placeholder="售價">
+          <button id="addItemBtn" type="button">新增小項目</button>
+        </div>
+        <div class="minor-list">
+          ${activeItems.map(item => {
+            const index = db.catalog.indexOf(item);
+            return `<div class="minor-item"><input class="catalog-name" data-index="${index}" value="${esc(item.name)}"><input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}"><button type="button" class="catalog-del deleteItem" data-index="${index}">刪除</button></div>`;
+          }).join("") || `<div class="minor-empty">這個大項目還沒有小項目</div>`}
+        </div>
+      </section>
     </div>
-  `).join("");
+  `;
 }
 
 function renderMoney() {
@@ -890,7 +918,7 @@ document.addEventListener("click", event => {
   }
   if (event.target.closest("#addCatBtn")) {
     const name = $("#newCatName").value.trim();
-    if (!name) return alert("請輸入分類名稱");
+    if (!name) return alert("請輸入大項目名稱");
     if (!getPartCats().includes(name)) db.catalog.push({ cat: name, name: "新項目", price: 0 });
     currentPartCat = name;
     $("#newCatName").value = "";
@@ -898,8 +926,9 @@ document.addEventListener("click", event => {
   }
   if (event.target.closest("#addItemBtn")) {
     const name = $("#newItemName").value.trim();
-    const cat = $("#itemCatSelect").value;
-    if (!name) return alert("請輸入品項名稱");
+    const cat = currentPartCat || $("#itemCatSelect")?.value || "";
+    if (!cat) return alert("請先新增大項目");
+    if (!name) return alert("請輸入小項目名稱");
     db.catalog.push({ cat, name, price: Number($("#newItemPrice").value || 0) });
     $("#newItemName").value = "";
     $("#newItemPrice").value = "";
