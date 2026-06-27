@@ -530,6 +530,7 @@ function renderItemManager() {
             return `<button type="button" class="major-btn selectCat ${cat === currentPartCat ? "active" : ""}" data-cat="${esc(cat)}"><b>${esc(cat)}</b><span>${count} 項</span></button>`;
           }).join("") || `<p class="muted">尚無大項目</p>`}
         </div>
+        ${currentPartCat ? `<button type="button" class="major-delete deleteCat" data-cat="${esc(currentPartCat)}">刪除此大項目</button>` : ""}
         <div class="major-add">
           <input id="newCatName" placeholder="新增大項目，例如 油品 / 傳動 / 煞車">
           <button id="addCatBtn" type="button">新增大項目</button>
@@ -950,6 +951,15 @@ document.addEventListener("click", event => {
   const deleteItem = event.target.closest(".deleteItem");
   if (deleteItem) {
     db.catalog.splice(Number(deleteItem.dataset.index), 1);
+    save();
+  }
+  const deleteCat = event.target.closest(".deleteCat");
+  if (deleteCat) {
+    const cat = deleteCat.dataset.cat;
+    const count = db.catalog.filter(item => item.cat === cat).length;
+    if (!confirm(`確定刪除「${cat}」大項目？底下 ${count} 個小項目也會一起刪除。`)) return;
+    db.catalog = db.catalog.filter(item => item.cat !== cat);
+    currentPartCat = getPartCats()[0] || "";
     save();
   }
   const toggleMinorEdit = event.target.closest(".toggleMinorEdit");

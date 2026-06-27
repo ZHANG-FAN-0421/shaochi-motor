@@ -100,6 +100,7 @@ main{max-width:1080px;margin:auto;padding:16px}.page{display:none}.page.active{d
 .major-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#020617!important;color:#f8fafc!important;border:1px solid #334155!important;text-align:left!important;padding:13px!important}
 .major-btn.active{border-color:#f59e0b!important;background:#f59e0b!important;color:#111827!important}
 .major-btn span{font-size:13px;white-space:nowrap}
+.major-delete{width:100%;margin:0 0 10px;background:#7f1d1d!important;color:#fecaca!important;border:1px solid #991b1b!important;padding:8px 10px!important;border-radius:10px!important;font-size:14px!important}
 .major-add{display:grid;gap:8px}
 .major-add input,.minor-add input{margin:0}
 .minor-add{display:grid;grid-template-columns:1fr 130px 150px;gap:8px;margin:10px 0 12px}
