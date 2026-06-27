@@ -36,7 +36,7 @@
       <button data-page="history">維修紀錄</button>
       <button data-page="customers">客戶車輛</button>
       <button data-page="money">營收統計</button>
-      <button data-page="syncTest">資料備份</button>
+      <button data-page="syncTest">多機連線</button>
       <button id="logout" class="logout">登出</button>
     </aside>
     <div id="overlay" class="overlay"></div>
@@ -149,7 +149,24 @@
         <section id="history" class="page"><div class="card"><h2>維修紀錄查詢</h2><div class="row"><input id="historyPlate" placeholder="輸入車牌"><button id="historyBtn" type="button">查詢紀錄</button></div><div id="historyList" class="list"></div></div></section>
         <section id="customers" class="page"><div class="card"><h2>客戶車輛資料</h2><div id="customerList" class="list"></div></div></section>
         <section id="money" class="page"><div class="card"><h2>營收統計</h2><p class="muted">統計正式工單，不包含估價單。</p><h2 id="revenue">$0</h2><p id="stats" class="muted"></p><button id="export" type="button">匯出資料</button><textarea id="importBox" placeholder="貼上備份 JSON"></textarea><button id="import" type="button" class="secondary">匯入資料</button></div></section>
-        <section id="syncTest" class="page"><div class="card"><h2>資料備份</h2><p class="muted">目前修復版提供本機 JSON 匯入匯出。Google Sheets 同步可保留 API URL 後續再接回。</p><label for="cloudApiUrlV108">Google Apps Script API URL</label><input id="cloudApiUrlV108" placeholder="Google Apps Script Web App URL"><div id="cloudStatusV108" class="notice"></div></div></section>
+        <section id="syncTest" class="page">
+          <div class="card">
+            <h2>多機連線</h2>
+            <p class="muted">輸入 Google Apps Script API URL 後，可讓多台電腦或手機共用同一份維修資料。</p>
+            <label for="cloudApiUrlV108">雲端同步 API URL</label>
+            <input id="cloudApiUrlV108" placeholder="貼上 Google Apps Script Web App URL">
+            <label style="display:flex;gap:8px;align-items:center;margin:8px 0;color:#f8fafc">
+              <input id="cloudAutoSync" type="checkbox" style="width:auto;margin:0">
+              開啟自動上傳與自動下載
+            </label>
+            <div class="actions">
+              <button id="cloudUploadNow" type="button">上傳到雲端</button>
+              <button id="cloudDownloadNow" type="button" class="secondary">從雲端下載</button>
+            </div>
+            <div id="cloudStatusV108" class="notice"></div>
+            <p id="cloudLastSync" class="muted"></p>
+          </div>
+        </section>
       </main>
     </div>
   </section>

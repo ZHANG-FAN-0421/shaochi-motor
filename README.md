@@ -14,6 +14,7 @@
 - 維修紀錄查詢
 - 營收統計
 - JSON 匯入 / 匯出備份
+- 多機連線雲端同步
 
 ## 登入
 
@@ -31,3 +32,14 @@
 - Folder: `/root`
 
 完成後即可用 GitHub Pages 網址開啟 `index.html`。
+
+## 多機連線
+
+系統的「多機連線」需要 Google Apps Script Web App URL。
+
+1. 到 Google Apps Script 建立新專案
+2. 貼上 `shaochi-cloud-sync-apps-script.js` 的內容
+3. 部署為 Web App
+4. 權限選「任何知道連結的人」
+5. 將 Web App URL 貼到系統的「多機連線」
+6. 開啟「自動上傳與自動下載」

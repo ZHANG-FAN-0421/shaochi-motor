@@ -2,6 +2,9 @@ const USER = "Zhangfan";
 const PASS = "zhangfan0421";
 const KEY = "shaochi_v14_data";
 const LOGIN = "shaochi_v14_login";
+const SYNC_URL = "shaochi_cloud_api_url";
+const SYNC_AUTO = "shaochi_cloud_auto_sync";
+const SYNC_LAST = "shaochi_cloud_last_sync";
 const STATUSES = ["待檢查", "等待料件", "維修中", "待取車", "已完成"];
 
 let db = { orders: [], customers: [], catalog: [] };
@@ -9,6 +12,8 @@ let draft = { plate: "", km: 0, customer: null };
 let selectedParts = [];
 let currentPartCat = "";
 let editingOrderId = null;
+let syncTimer = null;
+let applyingCloudData = false;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -52,7 +57,7 @@ const pageTitles = {
   history: "維修紀錄",
   customers: "客戶車輛",
   money: "營收統計",
-  syncTest: "資料備份"
+  syncTest: "多機連線"
 };
 
 function load() {
@@ -71,6 +76,7 @@ function load() {
 function save() {
   localStorage.setItem(KEY, JSON.stringify(db));
   render();
+  queueCloudUpload();
 }
 
 function normalizeOrder(order) {
@@ -331,6 +337,17 @@ function renderMoney() {
   $("#stats").textContent = `工單 ${orders.length} 筆 / 已收 ${money(paid)} / 未收 ${money(amount - paid)} / 成本 ${money(cost)} / 毛利 ${money(amount - cost)}`;
 }
 
+function renderCloudSettings() {
+  const urlInput = $("#cloudApiUrlV108");
+  const autoInput = $("#cloudAutoSync");
+  const last = $("#cloudLastSync");
+  if (!urlInput || !autoInput || !last) return;
+  if (document.activeElement !== urlInput) urlInput.value = localStorage.getItem(SYNC_URL) || "";
+  autoInput.checked = localStorage.getItem(SYNC_AUTO) === "1";
+  const lastSync = localStorage.getItem(SYNC_LAST);
+  last.textContent = lastSync ? `最後同步：${new Date(lastSync).toLocaleString("zh-TW")}` : "尚未同步";
+}
+
 function renderSearch() {
   const value = normalizePlate($("#search")?.value || "");
   const text = String($("#search")?.value || "").trim().toLowerCase();
@@ -362,6 +379,7 @@ function render() {
   renderItemManager();
   renderMoney();
   renderSearch();
+  renderCloudSettings();
 }
 
 function openPage(page) {
@@ -421,6 +439,96 @@ function importData() {
   } catch {
     alert("JSON 格式不正確");
   }
+}
+
+function setCloudStatus(message, type = "") {
+  const status = $("#cloudStatusV108");
+  if (!status) return;
+  status.textContent = message;
+  status.style.color = type === "ok" ? "#86efac" : type === "error" ? "#fca5a5" : "#fbbf24";
+}
+
+function getCloudUrl() {
+  return (localStorage.getItem(SYNC_URL) || "").trim();
+}
+
+function isAutoSyncOn() {
+  return localStorage.getItem(SYNC_AUTO) === "1";
+}
+
+function cloudPayload() {
+  return {
+    app: "shaochi-motor",
+    version: "v14.1-fixed",
+    updatedAt: new Date().toISOString(),
+    data: db
+  };
+}
+
+function normalizeCloudResponse(payload) {
+  const source = payload?.data || payload;
+  return {
+    orders: Array.isArray(source?.orders) ? source.orders.map(normalizeOrder) : [],
+    customers: Array.isArray(source?.customers) ? source.customers.map(normalizeCustomer) : [],
+    catalog: Array.isArray(source?.catalog) && source.catalog.length ? source.catalog : defaultCatalog.slice()
+  };
+}
+
+async function cloudUpload(options = {}) {
+  const url = getCloudUrl();
+  if (!url) {
+    if (!options.silent) setCloudStatus("請先輸入雲端同步 API URL", "error");
+    return false;
+  }
+  try {
+    if (!options.silent) setCloudStatus("正在上傳到雲端...");
+    const response = await fetch(url, {
+      method: "POST",
+      body: JSON.stringify({ action: "upload", ...cloudPayload() })
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+    localStorage.setItem(SYNC_LAST, new Date().toISOString());
+    renderCloudSettings();
+    if (!options.silent) setCloudStatus("已上傳到雲端", "ok");
+    return true;
+  } catch (error) {
+    setCloudStatus(`上傳失敗：${error.message}`, "error");
+    return false;
+  }
+}
+
+async function cloudDownload(options = {}) {
+  const url = getCloudUrl();
+  if (!url) {
+    if (!options.silent) setCloudStatus("請先輸入雲端同步 API URL", "error");
+    return false;
+  }
+  try {
+    if (!options.silent) setCloudStatus("正在從雲端下載...");
+    const joiner = url.includes("?") ? "&" : "?";
+    const response = await fetch(`${url}${joiner}action=download&t=${Date.now()}`);
+    const payload = await response.json();
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+    applyingCloudData = true;
+    db = normalizeCloudResponse(payload);
+    localStorage.setItem(KEY, JSON.stringify(db));
+    localStorage.setItem(SYNC_LAST, new Date().toISOString());
+    applyingCloudData = false;
+    render();
+    if (!options.silent) setCloudStatus("已從雲端下載", "ok");
+    return true;
+  } catch (error) {
+    applyingCloudData = false;
+    setCloudStatus(`下載失敗：${error.message}`, "error");
+    return false;
+  }
+}
+
+function queueCloudUpload() {
+  if (applyingCloudData || !isAutoSyncOn() || !getCloudUrl()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => cloudUpload({ silent: true }), 1200);
 }
 
 function formatPlateField(input) {
@@ -571,6 +679,8 @@ document.addEventListener("click", event => {
   }
   if (event.target.closest("#export")) exportData();
   if (event.target.closest("#import")) importData();
+  if (event.target.closest("#cloudUploadNow")) cloudUpload();
+  if (event.target.closest("#cloudDownloadNow")) cloudDownload();
 });
 
 document.addEventListener("input", event => {
@@ -585,6 +695,11 @@ document.addEventListener("input", event => {
   if (event.target.matches(".part-name,.part-price,.part-qty")) renderSelectedParts();
   if (event.target.matches("#laborCost,#paidAmount")) updateTotals();
   if (event.target.matches("#search")) renderSearch();
+  if (event.target.id === "cloudApiUrlV108") {
+    localStorage.setItem(SYNC_URL, event.target.value.trim());
+    renderCloudSettings();
+    return;
+  }
   if (event.target.matches(".catalog-name") && db.catalog[index]) db.catalog[index].name = event.target.value;
   if (event.target.matches(".catalog-price") && db.catalog[index]) db.catalog[index].price = Number(event.target.value || 0);
   if (event.target.matches(".catalog-name,.catalog-price")) {
@@ -595,6 +710,11 @@ document.addEventListener("input", event => {
 
 document.addEventListener("change", event => {
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
+  if (event.target.id === "cloudAutoSync") {
+    localStorage.setItem(SYNC_AUTO, event.target.checked ? "1" : "0");
+    renderCloudSettings();
+    if (event.target.checked) cloudDownload({ silent: false });
+  }
 });
 
 load();
@@ -603,3 +723,4 @@ if (localStorage.getItem(LOGIN) === "1") {
   $("#app").classList.remove("hide");
 }
 render();
+if (isAutoSyncOn() && getCloudUrl()) cloudDownload({ silent: true });
