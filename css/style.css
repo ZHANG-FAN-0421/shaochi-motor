@@ -106,13 +106,15 @@ main{max-width:1080px;margin:auto;padding:16px}.page{display:none}.page.active{d
 .minor-add button{white-space:nowrap}
 .hidden-select{display:none!important}
 .minor-list{display:grid;gap:7px}
-.minor-item{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:#020617;border:1px solid #334155;border-radius:14px;padding:9px 10px}
+.minor-item{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:#020617;border:1px solid #334155;border-radius:14px;padding:9px 10px;cursor:pointer}
+.minor-item.selected{border-color:#f59e0b}
 .minor-display{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
 .minor-display b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .minor-display span{color:#f8fafc;font-weight:900;white-space:nowrap}
 .minor-edit-fields{display:none;grid-template-columns:1fr 120px;gap:8px;grid-column:1/-1}
 .minor-edit-fields input{margin:0}
-.minor-actions{display:flex;gap:8px;align-items:center}
+.minor-actions{display:none;gap:8px;align-items:center}
+.minor-item.selected .minor-actions,.minor-item.editing .minor-actions{display:flex}
 .minor-actions button{padding:9px 12px!important;border-radius:12px!important;white-space:nowrap}
 .minor-item.editing{padding:10px}
 .minor-item.editing .minor-display{display:none}
