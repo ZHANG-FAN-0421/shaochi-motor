@@ -6,13 +6,14 @@ const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5
 const SYNC_URL = "shaochi_cloud_api_url";
 const SYNC_AUTO = "shaochi_cloud_auto_sync";
 const SYNC_LAST = "shaochi_cloud_last_sync";
-const STATUSES = ["待檢查", "等待料件", "維修中", "待取車", "已完成"];
+const STATUSES = ["待檢查", "等待料件", "維修中", "待取車", "已完成", "已交車"];
 
 let db = { orders: [], customers: [], catalog: [] };
 let draft = { plate: "", km: 0, customer: null };
 let selectedParts = [];
 let currentPartCat = "";
 let editingOrderId = null;
+let orderStatusFilter = "全部";
 let syncTimer = null;
 let applyingCloudData = false;
 
@@ -275,17 +276,27 @@ function paymentText(order) {
 }
 
 function orderCard(order) {
+  const remainAmount = Math.max(0, Number(order.amount || 0) - Number(order.paid || 0));
+  const itemText = esc(order.items || "尚未填寫維修內容").replace(/\n/g, "<br>");
   return `
-    <div class="item" data-order="${esc(order.id)}">
-      <h3>${esc(order.plate)} / ${esc(order.name || "未填客戶")}</h3>
-      <span class="badge ${badgeClass(order)}">${esc(order.type)} · ${esc(order.workStatus)}</span>
-      <p class="muted">${esc(order.date)} · ${Number(order.km || 0).toLocaleString("zh-TW")} KM · ${esc(order.phone || "無電話")}</p>
-      <div>${esc(order.items || "尚未填寫維修內容").replace(/\n/g, "<br>")}</div>
-      <p><b>${money(order.amount)}</b> / 已收 ${money(order.paid)} / ${paymentText(order)}</p>
-      <div class="actions">
-        <button type="button" class="editOrder" data-id="${esc(order.id)}">編輯</button>
+    <div class="order-card" data-order="${esc(order.id)}">
+      <h3>${esc(order.plate)}｜${esc(order.name || "未填客戶")}</h3>
+      <span class="order-status-badge">狀態：${esc(order.workStatus)}</span>
+      <p>${esc(order.date)}｜${Number(order.km || 0).toLocaleString("zh-TW")} km｜${esc(order.model || "未填車種")}</p>
+      <div class="order-items">${itemText}</div>
+      <div class="order-money">總額 ${money(order.amount)}｜已付 ${money(order.paid)}｜欠 ${money(remainAmount)} <span class="paid-chip ${remainAmount ? "unpaid" : ""}">${remainAmount ? "未結清" : "已付款"}</span></div>
+      <div class="order-status-box">
+        <label>工單狀態</label>
+        <select class="orderStatusSelect" data-id="${esc(order.id)}">
+          ${STATUSES.map(status => `<option value="${esc(status)}" ${status === order.workStatus ? "selected" : ""}>${esc(status)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="order-actions">
+        <button type="button" class="markPaid green" data-id="${esc(order.id)}">一鍵已付款</button>
+        <button type="button" class="editOrder" data-id="${esc(order.id)}">修改工單</button>
+        <button type="button" class="printOrder" data-id="${esc(order.id)}">列印預覽</button>
+        <button type="button" class="orderHistory" data-plate="${esc(order.plate)}">歷史維修</button>
         ${order.type === "估價單" ? `<button type="button" class="convertQuote" data-id="${esc(order.id)}">轉工單</button>` : ""}
-        <button type="button" class="markPaid green" data-id="${esc(order.id)}">結清</button>
         <button type="button" class="deleteOrder danger" data-id="${esc(order.id)}">刪除</button>
       </div>
     </div>
@@ -294,19 +305,108 @@ function orderCard(order) {
 
 function renderOrders() {
   const orders = db.orders.filter(order => order.type !== "估價單");
-  $("#orderList").innerHTML = orders.map(orderCard).join("") || `<p class="muted">目前沒有工單</p>`;
+  const filteredOrders = orderStatusFilter === "全部" ? orders : orders.filter(order => order.workStatus === orderStatusFilter);
+  $("#orderList").innerHTML = `
+    <div class="order-filter">
+      <label>工單狀態篩選</label>
+      <select id="orderStatusFilter">
+        <option ${orderStatusFilter === "全部" ? "selected" : ""}>全部</option>
+        ${STATUSES.map(status => `<option value="${esc(status)}" ${status === orderStatusFilter ? "selected" : ""}>${esc(status)}</option>`).join("")}
+      </select>
+    </div>
+    ${filteredOrders.map(orderCard).join("") || `<p class="muted">目前沒有工單</p>`}
+  `;
   const quotes = db.orders.filter(order => order.type === "估價單");
   $("#quoteList").innerHTML = quotes.map(orderCard).join("") || `<p class="muted">目前沒有估價單</p>`;
 }
 
 function renderCustomers() {
   $("#customerList").innerHTML = db.customers.map(customer => `
-    <div class="item">
-      <h3>${esc(customer.plate)} / ${esc(customer.name || "未填姓名")}</h3>
-      <p class="muted">${esc(customer.phone || "無電話")} · ${esc(customer.model || "未填車型")} · ${Number(customer.km || 0).toLocaleString("zh-TW")} KM</p>
-      <p>${esc([customer.year, customer.color].filter(Boolean).join(" / ") || "無其他資料")}</p>
+    <div class="customer-card">
+      <h3>${esc(customer.plate)}｜${esc(customer.name || "未填姓名")}</h3>
+      <p>電話：${esc(customer.phone || "無")}</p>
+      <p>車種：${esc(customer.model || "無")}｜年份：${esc(customer.year || "無")}｜顏色：${esc(customer.color || "無")}</p>
+      <div class="customer-actions">
+        <button type="button" class="editCustomer" data-id="${esc(customer.id)}">修改資料</button>
+        <button type="button" class="customerHistory" data-plate="${esc(customer.plate)}">歷史維修</button>
+        <button type="button" class="deleteCustomer danger" data-id="${esc(customer.id)}">刪除</button>
+      </div>
     </div>
   `).join("") || `<p class="muted">目前沒有客戶資料</p>`;
+}
+
+function editCustomer(id) {
+  const customer = db.customers.find(item => item.id === id);
+  if (!customer) return;
+  const name = prompt("客戶姓名", customer.name || "");
+  if (name === null) return;
+  const phone = prompt("電話", customer.phone || "");
+  if (phone === null) return;
+  const model = prompt("車種", customer.model || "");
+  if (model === null) return;
+  const year = prompt("年份", customer.year || "");
+  if (year === null) return;
+  const color = prompt("顏色", customer.color || "");
+  if (color === null) return;
+  Object.assign(customer, {
+    name: name.trim(),
+    phone: phone.trim(),
+    model: model.trim(),
+    year: year.trim(),
+    color: color.trim(),
+    updatedAt: new Date().toISOString()
+  });
+  save();
+}
+
+function deleteCustomer(id) {
+  const customer = db.customers.find(item => item.id === id);
+  if (!customer) return;
+  if (!confirm(`確定刪除 ${customer.plate}｜${customer.name || "未填姓名"}？`)) return;
+  db.customers = db.customers.filter(item => item.id !== id);
+  save();
+}
+
+function printOrder(id) {
+  const order = db.orders.find(item => item.id === id);
+  if (!order) return;
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("瀏覽器阻擋了列印預覽視窗");
+    return;
+  }
+  win.document.write(`
+    <!doctype html>
+    <html lang="zh-Hant">
+    <head>
+      <meta charset="utf-8">
+      <title>${esc(order.plate)} 工單</title>
+      <style>
+        body{font-family:"Microsoft JhengHei",Arial,sans-serif;color:#111827;padding:24px}
+        h1{margin:0 0 8px}
+        .meta{border-top:2px solid #111827;border-bottom:1px solid #d1d5db;padding:12px 0;margin:12px 0;line-height:1.8}
+        .items{white-space:pre-wrap;line-height:1.8;margin:18px 0}
+        .money{font-size:20px;font-weight:800;margin-top:18px}
+      </style>
+    </head>
+    <body>
+      <h1>紹馳車業維修工單</h1>
+      <div class="meta">
+        車牌：${esc(order.plate)}<br>
+        客戶：${esc(order.name || "")}<br>
+        電話：${esc(order.phone || "")}<br>
+        車種：${esc(order.model || "")}<br>
+        日期：${esc(order.date || "")}，里程：${Number(order.km || 0).toLocaleString("zh-TW")} km<br>
+        狀態：${esc(order.workStatus || "")}
+      </div>
+      <h2>維修內容</h2>
+      <div class="items">${esc(order.items || "")}</div>
+      <div class="money">總額 ${money(order.amount)}｜已付 ${money(order.paid)}｜欠 ${money(Math.max(0, Number(order.amount || 0) - Number(order.paid || 0)))}</div>
+      <script>window.print();</script>
+    </body>
+    </html>
+  `);
+  win.document.close();
 }
 
 function renderItemManager() {
@@ -653,6 +753,24 @@ document.addEventListener("click", event => {
       openPage("orders");
     }
   }
+  const printButton = event.target.closest(".printOrder");
+  if (printButton) printOrder(printButton.dataset.id);
+  const orderHistoryButton = event.target.closest(".orderHistory");
+  if (orderHistoryButton) {
+    $("#historyPlate").value = orderHistoryButton.dataset.plate || "";
+    renderHistory(orderHistoryButton.dataset.plate || "");
+    openPage("history");
+  }
+  const editCustomerButton = event.target.closest(".editCustomer");
+  if (editCustomerButton) editCustomer(editCustomerButton.dataset.id);
+  const customerHistoryButton = event.target.closest(".customerHistory");
+  if (customerHistoryButton) {
+    $("#historyPlate").value = customerHistoryButton.dataset.plate || "";
+    renderHistory(customerHistoryButton.dataset.plate || "");
+    openPage("history");
+  }
+  const deleteCustomerButton = event.target.closest(".deleteCustomer");
+  if (deleteCustomerButton) deleteCustomer(deleteCustomerButton.dataset.id);
   const del = event.target.closest(".deleteOrder");
   if (del && confirm("確定刪除這筆單據？")) {
     db.orders = db.orders.filter(item => item.id !== del.dataset.id);
@@ -729,6 +847,18 @@ document.addEventListener("input", event => {
 
 document.addEventListener("change", event => {
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
+  if (event.target.id === "orderStatusFilter") {
+    orderStatusFilter = event.target.value || "全部";
+    renderOrders();
+  }
+  if (event.target.matches(".orderStatusSelect")) {
+    const order = db.orders.find(item => item.id === event.target.dataset.id);
+    if (order) {
+      order.workStatus = event.target.value;
+      order.updatedAt = new Date().toISOString();
+      save();
+    }
+  }
   if (event.target.id === "cloudAutoSync") {
     localStorage.setItem(SYNC_AUTO, event.target.checked ? "1" : "0");
     renderCloudSettings();
