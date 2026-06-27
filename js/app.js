@@ -13,6 +13,7 @@ let draft = { plate: "", km: 0, customer: null };
 let selectedParts = [];
 let currentPartCat = "";
 let editingOrderId = null;
+let editingCustomerId = null;
 let orderStatusFilter = "全部";
 let syncTimer = null;
 let applyingCloudData = false;
@@ -335,28 +336,162 @@ function renderCustomers() {
   `).join("") || `<p class="muted">目前沒有客戶資料</p>`;
 }
 
+function ensureCustomerEditModal() {
+  if ($("#customerEditModal")) return;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="customerEditModal" class="customer-edit-modal hide">
+      <div class="customer-edit-panel">
+        <div class="customer-edit-head">
+          <div>
+            <h2>修改客戶資料</h2>
+            <p id="customerEditPlate" class="muted"></p>
+          </div>
+          <button type="button" id="closeCustomerEdit" class="customer-edit-close">返回</button>
+        </div>
+        <div class="customer-edit-form">
+          <label for="editCustomerName">姓名</label>
+          <input id="editCustomerName" placeholder="姓名">
+          <label for="editCustomerPhone">電話</label>
+          <input id="editCustomerPhone" placeholder="電話">
+          <label for="editCustomerModel">車種</label>
+          <input id="editCustomerModel" placeholder="車種">
+          <div class="customer-edit-grid">
+            <div>
+              <label for="editCustomerYear">年份</label>
+              <input id="editCustomerYear" placeholder="年份">
+            </div>
+            <div>
+              <label for="editCustomerColor">顏色</label>
+              <input id="editCustomerColor" placeholder="顏色">
+            </div>
+          </div>
+          <button type="button" id="saveCustomerEdit" class="customer-edit-save">儲存客戶資料</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
 function editCustomer(id) {
   const customer = db.customers.find(item => item.id === id);
   if (!customer) return;
-  const name = prompt("客戶姓名", customer.name || "");
-  if (name === null) return;
-  const phone = prompt("電話", customer.phone || "");
-  if (phone === null) return;
-  const model = prompt("車種", customer.model || "");
-  if (model === null) return;
-  const year = prompt("年份", customer.year || "");
-  if (year === null) return;
-  const color = prompt("顏色", customer.color || "");
-  if (color === null) return;
+  ensureCustomerEditModal();
+  editingCustomerId = id;
+  $("#customerEditPlate").textContent = customer.plate || "";
+  $("#editCustomerName").value = customer.name || "";
+  $("#editCustomerPhone").value = customer.phone || "";
+  $("#editCustomerModel").value = customer.model || "";
+  $("#editCustomerYear").value = customer.year || "";
+  $("#editCustomerColor").value = customer.color || "";
+  $("#customerEditModal").classList.remove("hide");
+  $("#editCustomerName").focus();
+}
+
+function closeCustomerEdit() {
+  editingCustomerId = null;
+  $("#customerEditModal")?.classList.add("hide");
+}
+
+function saveCustomerEdit() {
+  const customer = db.customers.find(item => item.id === editingCustomerId);
+  if (!customer) return;
   Object.assign(customer, {
-    name: name.trim(),
-    phone: phone.trim(),
-    model: model.trim(),
-    year: year.trim(),
-    color: color.trim(),
+    name: $("#editCustomerName").value.trim(),
+    phone: $("#editCustomerPhone").value.trim(),
+    model: $("#editCustomerModel").value.trim(),
+    year: $("#editCustomerYear").value.trim(),
+    color: $("#editCustomerColor").value.trim(),
     updatedAt: new Date().toISOString()
   });
+  closeCustomerEdit();
   save();
+}
+
+function ensurePrintPreviewModal() {
+  if ($("#printPreviewModal")) return;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="printPreviewModal" class="print-preview-modal hide">
+      <div class="print-toolbar">
+        <label>單據類型</label>
+        <select id="printDocType">
+          <option>維修工單</option>
+          <option>估價單</option>
+          <option>車禍估價單</option>
+          <option>保險估價單</option>
+          <option>零件報價單</option>
+        </select>
+        <button type="button" id="closePrintPreview">返回</button>
+        <button type="button" id="copyPrintText" class="green">複製文字</button>
+        <button type="button" id="systemPrint">嘗試系統列印</button>
+      </div>
+      <div id="printPreviewSheet"></div>
+    </div>
+  `);
+}
+
+function orderPrintText(order, docType) {
+  return [
+    `紹馳技研 ${docType}`,
+    `日期：${order.date || ""}`,
+    `車牌：${order.plate || ""}`,
+    `客戶：${order.name || ""}`,
+    `電話：${order.phone || ""}`,
+    `公里數：${Number(order.km || 0).toLocaleString("zh-TW")} KM`,
+    `車種：${order.model || ""}`,
+    "",
+    "維修 / 估價項目",
+    order.items || "",
+    "",
+    `總額：${money(order.amount)}`,
+    `已付：${money(order.paid)}`,
+    `欠款：${money(Math.max(0, Number(order.amount || 0) - Number(order.paid || 0)))}`
+  ].join("\n");
+}
+
+function renderPrintPreview(order, docType = $("#printDocType")?.value || "維修工單") {
+  const remain = Math.max(0, Number(order.amount || 0) - Number(order.paid || 0));
+  const lines = String(order.items || "").split("\n").filter(Boolean);
+  $("#printPreviewSheet").innerHTML = `
+    <article class="print-sheet" data-order-id="${esc(order.id)}">
+      <header class="print-sheet-head">
+        <div>
+          <small>SHAO CHI TECH</small>
+          <h1>紹馳技研</h1>
+          <p>LINE：zhangfan0421</p>
+        </div>
+        <div class="print-title">
+          <h2>${esc(docType)}</h2>
+          <p>${esc(order.date || "")}</p>
+          <p>${esc(docType)}</p>
+        </div>
+      </header>
+      <section class="print-info-grid">
+        <div><span>車牌</span><b>${esc(order.plate || "")}</b></div>
+        <div><span>客戶姓名</span><b>${esc(order.name || "")}</b></div>
+        <div><span>電話</span><b>${esc(order.phone || "無")}</b></div>
+        <div><span>公里數</span><b>${Number(order.km || 0).toLocaleString("zh-TW")} KM</b></div>
+        <div><span>車種</span><b>${esc(order.model || "無")}</b></div>
+        <div><span>年份 / 顏色</span><b>${esc(order.year || "無")} ${esc(order.color || "")}</b></div>
+      </section>
+      <h3>維修 / 估價項目</h3>
+      <ul class="print-items">
+        ${lines.map(line => `<li>${esc(line)}</li>`).join("") || "<li>尚未填寫</li>"}
+      </ul>
+      <h3>金額</h3>
+      <div class="print-money"><span>總額</span><b>${money(order.amount)}</b></div>
+      <div class="print-money"><span>已付</span><b>${money(order.paid)}</b></div>
+      <div class="print-money total"><span>欠款</span><b>${money(remain)}</b></div>
+      <div class="print-note">
+        <b>備註</b><br>
+        本估價僅供維修 / 保險參考，實際金額依現場拆檢與零件狀況為準。
+      </div>
+      <div class="print-sign">
+        <div><span></span><b>客戶確認 / 簽名</b></div>
+        <div><span></span><b>日期</b></div>
+      </div>
+      <footer>感謝您的支持｜紹馳技研｜LINE：zhangfan0421</footer>
+    </article>
+  `;
 }
 
 function deleteCustomer(id) {
@@ -370,43 +505,10 @@ function deleteCustomer(id) {
 function printOrder(id) {
   const order = db.orders.find(item => item.id === id);
   if (!order) return;
-  const win = window.open("", "_blank");
-  if (!win) {
-    alert("瀏覽器阻擋了列印預覽視窗");
-    return;
-  }
-  win.document.write(`
-    <!doctype html>
-    <html lang="zh-Hant">
-    <head>
-      <meta charset="utf-8">
-      <title>${esc(order.plate)} 工單</title>
-      <style>
-        body{font-family:"Microsoft JhengHei",Arial,sans-serif;color:#111827;padding:24px}
-        h1{margin:0 0 8px}
-        .meta{border-top:2px solid #111827;border-bottom:1px solid #d1d5db;padding:12px 0;margin:12px 0;line-height:1.8}
-        .items{white-space:pre-wrap;line-height:1.8;margin:18px 0}
-        .money{font-size:20px;font-weight:800;margin-top:18px}
-      </style>
-    </head>
-    <body>
-      <h1>紹馳車業維修工單</h1>
-      <div class="meta">
-        車牌：${esc(order.plate)}<br>
-        客戶：${esc(order.name || "")}<br>
-        電話：${esc(order.phone || "")}<br>
-        車種：${esc(order.model || "")}<br>
-        日期：${esc(order.date || "")}，里程：${Number(order.km || 0).toLocaleString("zh-TW")} km<br>
-        狀態：${esc(order.workStatus || "")}
-      </div>
-      <h2>維修內容</h2>
-      <div class="items">${esc(order.items || "")}</div>
-      <div class="money">總額 ${money(order.amount)}｜已付 ${money(order.paid)}｜欠 ${money(Math.max(0, Number(order.amount || 0) - Number(order.paid || 0)))}</div>
-      <script>window.print();</script>
-    </body>
-    </html>
-  `);
-  win.document.close();
+  ensurePrintPreviewModal();
+  $("#printDocType").value = order.type === "估價單" ? "估價單" : "維修工單";
+  renderPrintPreview(order);
+  $("#printPreviewModal").classList.remove("hide");
 }
 
 function renderItemManager() {
@@ -734,6 +836,16 @@ document.addEventListener("click", event => {
   if (edit) openEditOrder(edit.dataset.id);
   if (event.target.closest("#closeEditOrder")) $("#editOrderModal").classList.add("hide");
   if (event.target.closest("#saveEditOrder")) saveEditOrder();
+  if (event.target.closest("#closeCustomerEdit")) closeCustomerEdit();
+  if (event.target.closest("#saveCustomerEdit")) saveCustomerEdit();
+  if (event.target.id === "customerEditModal") closeCustomerEdit();
+  if (event.target.closest("#closePrintPreview")) $("#printPreviewModal")?.classList.add("hide");
+  if (event.target.closest("#systemPrint")) window.print();
+  if (event.target.closest("#copyPrintText")) {
+    const sheet = $(".print-sheet");
+    const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
+    if (order) navigator.clipboard?.writeText(orderPrintText(order, $("#printDocType").value));
+  }
   const paid = event.target.closest(".markPaid");
   if (paid) {
     const order = db.orders.find(item => item.id === paid.dataset.id);
@@ -858,6 +970,11 @@ document.addEventListener("change", event => {
       order.updatedAt = new Date().toISOString();
       save();
     }
+  }
+  if (event.target.id === "printDocType") {
+    const sheet = $(".print-sheet");
+    const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
+    if (order) renderPrintPreview(order, event.target.value);
   }
   if (event.target.id === "cloudAutoSync") {
     localStorage.setItem(SYNC_AUTO, event.target.checked ? "1" : "0");
