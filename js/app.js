@@ -71,7 +71,9 @@ function load() {
   }
   if (!Array.isArray(db.orders)) db.orders = [];
   if (!Array.isArray(db.customers)) db.customers = [];
-  if (!Array.isArray(db.catalog) || !db.catalog.length) db.catalog = defaultCatalog.slice();
+  if (!Array.isArray(db.catalog)) db.catalog = defaultCatalog.slice();
+  if (!Array.isArray(db.categories)) db.categories = [];
+  db.categories = [...new Set([...db.categories, ...db.catalog.map(item => item.cat)].filter(Boolean))];
   db.orders = db.orders.map(normalizeOrder);
   db.customers = db.customers.map(normalizeCustomer);
 }
@@ -130,7 +132,7 @@ function findCustomerByPlate(plate) {
 }
 
 function getPartCats() {
-  return [...new Set(db.catalog.map(item => item.cat).filter(Boolean))];
+  return [...new Set([...(db.categories || []), ...db.catalog.map(item => item.cat)].filter(Boolean))];
 }
 
 function partsTotal() {
@@ -677,8 +679,10 @@ function importData() {
     db = {
       orders: Array.isArray(incoming.orders) ? incoming.orders.map(normalizeOrder) : [],
       customers: Array.isArray(incoming.customers) ? incoming.customers.map(normalizeCustomer) : [],
-      catalog: Array.isArray(incoming.catalog) && incoming.catalog.length ? incoming.catalog : defaultCatalog.slice()
+      catalog: Array.isArray(incoming.catalog) ? incoming.catalog : defaultCatalog.slice(),
+      categories: Array.isArray(incoming.categories) ? incoming.categories : []
     };
+    db.categories = [...new Set([...db.categories, ...db.catalog.map(item => item.cat)].filter(Boolean))];
     save();
     alert("匯入完成");
   } catch {
@@ -715,7 +719,8 @@ function normalizeCloudResponse(payload) {
   return {
     orders: Array.isArray(source?.orders) ? source.orders.map(normalizeOrder) : [],
     customers: Array.isArray(source?.customers) ? source.customers.map(normalizeCustomer) : [],
-    catalog: Array.isArray(source?.catalog) && source.catalog.length ? source.catalog : defaultCatalog.slice()
+    catalog: Array.isArray(source?.catalog) ? source.catalog : defaultCatalog.slice(),
+    categories: [...new Set([...(Array.isArray(source?.categories) ? source.categories : []), ...(Array.isArray(source?.catalog) ? source.catalog.map(item => item.cat) : [])].filter(Boolean))]
   };
 }
 
@@ -933,7 +938,8 @@ document.addEventListener("click", event => {
   if (event.target.closest("#addCatBtn")) {
     const name = $("#newCatName").value.trim();
     if (!name) return alert("請輸入大項目名稱");
-    if (!getPartCats().includes(name)) db.catalog.push({ cat: name, name: "新項目", price: 0 });
+    if (!db.categories) db.categories = [];
+    if (!getPartCats().includes(name)) db.categories.push(name);
     currentPartCat = name;
     $("#newCatName").value = "";
     save();
@@ -959,6 +965,7 @@ document.addEventListener("click", event => {
     const count = db.catalog.filter(item => item.cat === cat).length;
     if (!confirm(`確定刪除「${cat}」大項目？底下 ${count} 個小項目也會一起刪除。`)) return;
     db.catalog = db.catalog.filter(item => item.cat !== cat);
+    db.categories = (db.categories || []).filter(item => item !== cat);
     currentPartCat = getPartCats()[0] || "";
     save();
   }
