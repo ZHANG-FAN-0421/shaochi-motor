@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>奇典動能維修管理</title>
-  <link rel="stylesheet" href="css/style.css?v=20260801-order-sort-explicit">
+  <link rel="stylesheet" href="css/style.css?v=20260801-order-plate-date-filter">
 </head>
 <body>
   <section id="login" class="login">
@@ -129,7 +129,7 @@
           </div>
         </section>
 
-        <section id="orders" class="page"><div class="card"><h2>維修單一覽表</h2><input id="orderSearch" class="list-search" placeholder="搜尋維修單：單號、車牌 XXX-XXXX / XXX-XXX、客戶、師傅、日期"><div id="createSuccessMsg" class="notice hide">工單已建立</div><div id="orderList" class="list"></div></div></section>
+        <section id="orders" class="page"><div class="card"><h2>維修單一覽表</h2><div class="order-filter-row"><input id="orderSearch" class="list-search" placeholder="搜尋車牌 XXX-XXXX / XXX-XXX"><input id="orderDateFilter" class="list-search order-date-filter" type="date" title="日期切換"><button type="button" id="clearOrderDate" class="clear-date-btn">全部日期</button></div><div id="createSuccessMsg" class="notice hide">工單已建立</div><div id="orderList" class="list"></div></div></section>
         <section id="appointments" class="page">
           <div class="card">
             <h2>預約一覽</h2>
@@ -198,6 +198,6 @@
     </div>
   </div>
 
-  <script src="js/app.js?v=20260801-order-sort-explicit"></script>
+  <script src="js/app.js?v=20260801-order-plate-date-filter"></script>
 </body>
 </html>

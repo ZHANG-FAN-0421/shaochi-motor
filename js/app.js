@@ -662,18 +662,26 @@ function orderCard(order, index = 0, displayNo = "") {
 
 function renderOrders() {
   const orderQuery = $("#orderSearch")?.value || "";
+  const orderDate = $("#orderDateFilter")?.value || "";
   const quoteQuery = $("#quoteSearch")?.value || "";
   repairOrderNumbers();
   assignDisplayOrderNumbers();
-  const orderFields = order => [order.orderNo, shortOrderNo(order), order.plate, order.name, order.phone, order.model, order.year, order.color, order.mechanicName, order.date, order.items];
+  const plateMatches = (order, query) => {
+    const keyword = formatPlate(query);
+    if (!keyword) return true;
+    return normalizePlate(order.plate).includes(normalizePlate(keyword));
+  };
+  const dateMatches = (order, date) => !date || dateInputValue(order.date) === date;
+  const quoteFields = order => [order.orderNo, shortOrderNo(order), order.plate, order.name, order.phone, order.model, order.year, order.color, order.mechanicName, order.date, order.items];
   const orders = db.orders
     .filter(order => order.type !== "估價單")
-    .filter(order => includesQuery(orderFields(order), orderQuery))
+    .filter(order => plateMatches(order, orderQuery))
+    .filter(order => dateMatches(order, orderDate))
     .sort(compareOrderDesc);
   $("#orderList").innerHTML = orders.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有工單</p>`;
   const quotes = db.orders
     .filter(order => order.type === "估價單")
-    .filter(order => includesQuery(orderFields(order), quoteQuery))
+    .filter(order => includesQuery(quoteFields(order), quoteQuery))
     .sort(compareOrderDesc);
   $("#quoteList").innerHTML = quotes.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有估價單</p>`;
 }
@@ -1599,6 +1607,11 @@ document.addEventListener("click", event => {
   if (event.target.id === "customerEditModal") closeCustomerEdit();
   if (event.target.closest("#closePrintPreview")) $("#printPreviewModal")?.classList.add("hide");
   if (event.target.closest("#systemPrint")) window.print();
+  if (event.target.closest("#clearOrderDate")) {
+    const dateFilter = $("#orderDateFilter");
+    if (dateFilter) dateFilter.value = "";
+    renderOrders();
+  }
   if (event.target.closest("#copyPrintText")) {
     const sheet = $(".print-sheet");
     const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
@@ -1833,6 +1846,7 @@ document.addEventListener("input", event => {
 });
 
 document.addEventListener("change", event => {
+  if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
