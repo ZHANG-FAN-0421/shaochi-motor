@@ -78,8 +78,21 @@ function orderNoSequence(orderNo) {
   return match ? Number(match[1] || 0) : 0;
 }
 
-function shortOrderNo(orderNo) {
-  const text = String(orderNo || "").trim();
+function globalOrderSequence(order) {
+  const prefix = orderPrefix(order?.type);
+  const list = (db.orders || [])
+    .filter(item => orderPrefix(item.type) === prefix)
+    .slice()
+    .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}-${a.id || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}-${b.id || ""}`));
+  const index = list.findIndex(item => item.id === order?.id);
+  return index >= 0 ? index + 1 : orderNoSequence(order?.orderNo);
+}
+
+function shortOrderNo(orderOrNo) {
+  if (orderOrNo && typeof orderOrNo === "object") {
+    return `${orderPrefix(orderOrNo.type)}-${String(globalOrderSequence(orderOrNo) || 1).padStart(3, "0")}`;
+  }
+  const text = String(orderOrNo || "").trim();
   const parts = text.split("-");
   if ((parts[0] === "RO" || parts[0] === "QT") && parts.length >= 3) {
     return `${parts[0]}-${parts[parts.length - 1]}`;
@@ -112,6 +125,7 @@ function compareOrderDesc(a, b) {
 
 function repairOrderNumbers() {
   const counters = {};
+  let changed = false;
   (db.orders || [])
     .slice()
     .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}`))
@@ -119,8 +133,13 @@ function repairOrderNumbers() {
       const prefix = orderPrefix(order.type);
       const dateKey = orderDateKey(order.date);
       counters[prefix] = (counters[prefix] || 0) + 1;
-      order.orderNo = `${prefix}-${dateKey}-${String(counters[prefix]).padStart(3, "0")}`;
+      const nextNo = `${prefix}-${dateKey}-${String(counters[prefix]).padStart(3, "0")}`;
+      if (order.orderNo !== nextNo) {
+        order.orderNo = nextNo;
+        changed = true;
+      }
     });
+  if (changed) localStorage.setItem(KEY, JSON.stringify(db));
 }
 
 const defaultCatalog = [
@@ -616,7 +635,7 @@ function paymentText(order) {
 
 function orderCard(order, index = 0) {
   const mechanic = order.mechanicName || "未指定師傅";
-  const shortNo = shortOrderNo(order.orderNo);
+  const shortNo = shortOrderNo(order);
   return `
     <div class="order-card order-card-line" data-order="${esc(order.id)}">
       <div class="order-line-info">
@@ -639,7 +658,7 @@ function renderOrders() {
   const orderQuery = $("#orderSearch")?.value || "";
   const quoteQuery = $("#quoteSearch")?.value || "";
   repairOrderNumbers();
-  const orderFields = order => [order.orderNo, shortOrderNo(order.orderNo), order.plate, order.name, order.phone, order.model, order.year, order.color, order.mechanicName, order.date, order.items];
+  const orderFields = order => [order.orderNo, shortOrderNo(order), order.plate, order.name, order.phone, order.model, order.year, order.color, order.mechanicName, order.date, order.items];
   const orders = db.orders
     .filter(order => order.type !== "估價單")
     .filter(order => includesQuery(orderFields(order), orderQuery))
