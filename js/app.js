@@ -78,32 +78,21 @@ function orderNoSequence(orderNo) {
   return match ? Number(match[1] || 0) : 0;
 }
 
-function globalOrderSequence(order) {
-  const prefix = orderPrefix(order?.type);
-  const list = (db.orders || [])
-    .filter(item => orderPrefix(item.type) === prefix)
-    .slice()
-    .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}-${a.id || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}-${b.id || ""}`));
-  const index = list.findIndex(item => item === order);
-  return index >= 0 ? index + 1 : orderNoSequence(order?.orderNo);
-}
-
-function orderDisplayNumbers(type) {
-  const prefix = orderPrefix(type);
-  const map = new Map();
+function assignDisplayOrderNumbers() {
+  const counters = {};
   (db.orders || [])
-    .filter(order => orderPrefix(order.type) === prefix)
     .slice()
     .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}-${a.id || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}-${b.id || ""}`))
-    .forEach((order, index) => {
-      map.set(order, `${prefix}-${String(index + 1).padStart(3, "0")}`);
+    .forEach(order => {
+      const prefix = orderPrefix(order.type);
+      counters[prefix] = (counters[prefix] || 0) + 1;
+      order._displayOrderNo = `${prefix}-${String(counters[prefix]).padStart(3, "0")}`;
     });
-  return map;
 }
 
 function shortOrderNo(orderOrNo) {
   if (orderOrNo && typeof orderOrNo === "object") {
-    return `${orderPrefix(orderOrNo.type)}-${String(globalOrderSequence(orderOrNo) || 1).padStart(3, "0")}`;
+    return orderOrNo._displayOrderNo || `${orderPrefix(orderOrNo.type)}-${String(orderNoSequence(orderOrNo.orderNo) || 1).padStart(3, "0")}`;
   }
   const text = String(orderOrNo || "").trim();
   const parts = text.split("-");
@@ -671,19 +660,18 @@ function renderOrders() {
   const orderQuery = $("#orderSearch")?.value || "";
   const quoteQuery = $("#quoteSearch")?.value || "";
   repairOrderNumbers();
+  assignDisplayOrderNumbers();
   const orderFields = order => [order.orderNo, shortOrderNo(order), order.plate, order.name, order.phone, order.model, order.year, order.color, order.mechanicName, order.date, order.items];
   const orders = db.orders
     .filter(order => order.type !== "估價單")
     .filter(order => includesQuery(orderFields(order), orderQuery))
     .sort(compareOrderDesc);
-  const orderNoMap = orderDisplayNumbers("工單");
-  $("#orderList").innerHTML = orders.map((order, index) => orderCard(order, index, orderNoMap.get(order))).join("") || `<p class="muted">目前沒有工單</p>`;
+  $("#orderList").innerHTML = orders.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有工單</p>`;
   const quotes = db.orders
     .filter(order => order.type === "估價單")
     .filter(order => includesQuery(orderFields(order), quoteQuery))
     .sort(compareOrderDesc);
-  const quoteNoMap = orderDisplayNumbers("估價單");
-  $("#quoteList").innerHTML = quotes.map((order, index) => orderCard(order, index, quoteNoMap.get(order))).join("") || `<p class="muted">目前沒有估價單</p>`;
+  $("#quoteList").innerHTML = quotes.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有估價單</p>`;
 }
 
 function renderCustomers() {
