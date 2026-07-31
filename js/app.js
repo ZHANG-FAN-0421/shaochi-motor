@@ -84,8 +84,21 @@ function globalOrderSequence(order) {
     .filter(item => orderPrefix(item.type) === prefix)
     .slice()
     .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}-${a.id || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}-${b.id || ""}`));
-  const index = list.findIndex(item => item.id === order?.id);
+  const index = list.findIndex(item => item === order);
   return index >= 0 ? index + 1 : orderNoSequence(order?.orderNo);
+}
+
+function orderDisplayNumbers(type) {
+  const prefix = orderPrefix(type);
+  const map = new Map();
+  (db.orders || [])
+    .filter(order => orderPrefix(order.type) === prefix)
+    .slice()
+    .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}-${a.id || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}-${b.id || ""}`))
+    .forEach((order, index) => {
+      map.set(order, `${prefix}-${String(index + 1).padStart(3, "0")}`);
+    });
+  return map;
 }
 
 function shortOrderNo(orderOrNo) {
@@ -633,9 +646,9 @@ function paymentText(order) {
   return `未收 ${money(remain)}`;
 }
 
-function orderCard(order, index = 0) {
+function orderCard(order, index = 0, displayNo = "") {
   const mechanic = order.mechanicName || "未指定師傅";
-  const shortNo = shortOrderNo(order);
+  const shortNo = displayNo || shortOrderNo(order);
   return `
     <div class="order-card order-card-line" data-order="${esc(order.id)}">
       <div class="order-line-info">
@@ -663,12 +676,14 @@ function renderOrders() {
     .filter(order => order.type !== "估價單")
     .filter(order => includesQuery(orderFields(order), orderQuery))
     .sort(compareOrderDesc);
-  $("#orderList").innerHTML = orders.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有工單</p>`;
+  const orderNoMap = orderDisplayNumbers("工單");
+  $("#orderList").innerHTML = orders.map((order, index) => orderCard(order, index, orderNoMap.get(order))).join("") || `<p class="muted">目前沒有工單</p>`;
   const quotes = db.orders
     .filter(order => order.type === "估價單")
     .filter(order => includesQuery(orderFields(order), quoteQuery))
     .sort(compareOrderDesc);
-  $("#quoteList").innerHTML = quotes.map((order, index) => orderCard(order, index)).join("") || `<p class="muted">目前沒有估價單</p>`;
+  const quoteNoMap = orderDisplayNumbers("估價單");
+  $("#quoteList").innerHTML = quotes.map((order, index) => orderCard(order, index, quoteNoMap.get(order))).join("") || `<p class="muted">目前沒有估價單</p>`;
 }
 
 function renderCustomers() {
