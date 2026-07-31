@@ -80,8 +80,11 @@ function orderNoSequence(orderNo) {
 
 function shortOrderNo(orderNo) {
   const text = String(orderNo || "").trim();
-  const match = text.match(/^(RO|QT)-\d+-(\d{3,})$/);
-  return match ? `${match[1]}-${match[2]}` : (text || "未編號");
+  const parts = text.split("-");
+  if ((parts[0] === "RO" || parts[0] === "QT") && parts.length >= 3) {
+    return `${parts[0]}-${parts[parts.length - 1]}`;
+  }
+  return text || "未編號";
 }
 
 function nextOrderNo(type = "工單", date = todayText(), excludeId = "") {
@@ -630,7 +633,7 @@ function orderCard(order, index = 0) {
     <div class="order-card order-card-line" data-order="${esc(order.id)}">
       <div class="order-line-info">
         <b class="order-row-index">${index + 1}</b>
-        <button type="button" class="order-no editOrder" data-id="${esc(order.id)}" title="修改工單"><span aria-hidden="true">✎</span> ${esc(shortNo)}</button>
+        <button type="button" class="order-no editOrder" data-id="${esc(order.id)}" title="修改工單">✎ ${esc(shortNo)}</button>
         <b>${esc(mechanic)}</b>
         <b>${esc(order.date || "未填日期")}</b>
         <b>${esc(order.plate || "未填車號")}</b>

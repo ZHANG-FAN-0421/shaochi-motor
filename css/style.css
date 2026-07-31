@@ -565,7 +565,6 @@ main{max-width:1080px;margin:auto;padding:16px}.page{display:none}.page.active{d
 .order-line-info b,.order-line-info span,.order-line-info button{display:inline-flex;align-items:center;min-width:0}
 .order-line-info .order-row-index{width:26px;justify-content:center;color:#172033;font-weight:1000}
 .order-line-info .order-no{color:#b45309!important;background:#fffbeb!important;border:1px solid #fcd34d!important;border-radius:3px!important;padding:3px 7px!important;font-size:14px!important;font-weight:1000!important;line-height:1.2!important;cursor:pointer!important}
-.order-line-info .order-no span{font-size:12px;margin-left:4px;color:#92400e}
 .order-line-info .order-no:hover{background:#fef3c7!important;border-color:#f59e0b!important}
 .order-line-info b:not(:last-child)::after,.order-line-info span:not(:last-child)::after,.order-line-info button:not(:last-child)::after{content:"｜";margin-left:10px;color:#94a3b8;font-weight:700}
 .order-line-actions{margin-top:0;justify-content:flex-end;flex-wrap:nowrap}
