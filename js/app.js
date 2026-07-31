@@ -120,8 +120,10 @@ function ensureOrderNo(order) {
 }
 
 function compareOrderDesc(a, b) {
-  const aKey = `${orderDateKey(a.date)}-${String(orderNoSequence(a.orderNo)).padStart(6, "0")}-${a.createdAt || ""}`;
-  const bKey = `${orderDateKey(b.date)}-${String(orderNoSequence(b.orderNo)).padStart(6, "0")}-${b.createdAt || ""}`;
+  const aSeq = orderNoSequence(a._displayOrderNo || a.orderNo);
+  const bSeq = orderNoSequence(b._displayOrderNo || b.orderNo);
+  const aKey = `${orderDateKey(a.date)}-${String(aSeq).padStart(6, "0")}-${a.createdAt || ""}`;
+  const bKey = `${orderDateKey(b.date)}-${String(bSeq).padStart(6, "0")}-${b.createdAt || ""}`;
   return bKey.localeCompare(aKey);
 }
 
