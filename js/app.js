@@ -93,7 +93,7 @@ function nextOrderNo(type = "工單", date = todayText(), excludeId = "") {
   const max = (db.orders || []).reduce((highest, order) => {
     if (excludeId && order.id === excludeId) return highest;
     const no = String(order.orderNo || "");
-    if (!no.startsWith(`${prefix}-${dateKey}-`)) return highest;
+    if (!no.startsWith(`${prefix}-`)) return highest;
     return Math.max(highest, orderNoSequence(no));
   }, 0);
   return `${prefix}-${dateKey}-${String(max + 1).padStart(3, "0")}`;
@@ -112,26 +112,14 @@ function compareOrderDesc(a, b) {
 
 function repairOrderNumbers() {
   const counters = {};
-  const used = new Set();
   (db.orders || [])
     .slice()
     .sort((a, b) => `${orderDateKey(a.date)}-${a.createdAt || ""}`.localeCompare(`${orderDateKey(b.date)}-${b.createdAt || ""}`))
     .forEach(order => {
       const prefix = orderPrefix(order.type);
       const dateKey = orderDateKey(order.date);
-      const bucket = `${prefix}-${dateKey}`;
-      counters[bucket] = counters[bucket] || 0;
-      const valid = orderNoPattern.test(String(order.orderNo || "")) && String(order.orderNo).startsWith(`${bucket}-`) && !used.has(order.orderNo);
-      if (valid) {
-        counters[bucket] = Math.max(counters[bucket], orderNoSequence(order.orderNo));
-        used.add(order.orderNo);
-        return;
-      }
-      do {
-        counters[bucket] += 1;
-        order.orderNo = `${bucket}-${String(counters[bucket]).padStart(3, "0")}`;
-      } while (used.has(order.orderNo));
-      used.add(order.orderNo);
+      counters[prefix] = (counters[prefix] || 0) + 1;
+      order.orderNo = `${prefix}-${dateKey}-${String(counters[prefix]).padStart(3, "0")}`;
     });
 }
 
