@@ -630,9 +630,9 @@ function orderCard(order, index = 0) {
     <div class="order-card order-card-line" data-order="${esc(order.id)}">
       <div class="order-line-info">
         <b class="order-row-index">${index + 1}</b>
-        <button type="button" class="order-no editOrder" data-id="${esc(order.id)}" title="修改工單">${esc(shortNo)} <span aria-hidden="true">✎</span></button>
+        <button type="button" class="order-no editOrder" data-id="${esc(order.id)}" title="修改工單"><span aria-hidden="true">✎</span> ${esc(shortNo)}</button>
         <b>${esc(mechanic)}</b>
-        <b>${esc(order.plate || "未填車號")}</b>
+        <b>${esc(order.date || "未填日期")}</b>
       </div>
       <div class="order-actions order-line-actions">
         <button type="button" class="printOrder" data-id="${esc(order.id)}">列印工單</button>
