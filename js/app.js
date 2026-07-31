@@ -70,7 +70,7 @@ const formatPlate = value => {
   return digits ? `${letters}-${digits}` : letters;
 };
 const orderPrefix = type => String(type || "").includes("估價") ? "QT" : "RO";
-const orderDateKey = value => String(value || todayText()).replace(/[^0-9]/g, "").slice(0, 8) || todayText().replace(/-/g, "");
+const orderDateKey = value => dateInputValue(value).replace(/-/g, "");
 const orderNoPattern = /^(RO|QT)-\d{8}-\d{3,}$/;
 
 function orderNoSequence(orderNo) {
@@ -80,7 +80,7 @@ function orderNoSequence(orderNo) {
 
 function shortOrderNo(orderNo) {
   const text = String(orderNo || "").trim();
-  const match = text.match(/^(RO|QT)-\d{8}-(\d{3,})$/);
+  const match = text.match(/^(RO|QT)-\d+-(\d{3,})$/);
   return match ? `${match[1]}-${match[2]}` : (text || "未編號");
 }
 
