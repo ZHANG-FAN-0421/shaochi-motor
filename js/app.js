@@ -122,9 +122,11 @@ function ensureOrderNo(order) {
 function compareOrderDesc(a, b) {
   const aSeq = orderNoSequence(a._displayOrderNo || a.orderNo);
   const bSeq = orderNoSequence(b._displayOrderNo || b.orderNo);
-  const aKey = `${orderDateKey(a.date)}-${String(aSeq).padStart(6, "0")}-${a.createdAt || ""}`;
-  const bKey = `${orderDateKey(b.date)}-${String(bSeq).padStart(6, "0")}-${b.createdAt || ""}`;
-  return bKey.localeCompare(aKey);
+  const dateSort = orderDateKey(b.date).localeCompare(orderDateKey(a.date));
+  if (dateSort) return dateSort;
+  const noSort = bSeq - aSeq;
+  if (noSort) return noSort;
+  return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
 }
 
 function repairOrderNumbers() {
