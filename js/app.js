@@ -1,6 +1,7 @@
 const USER = "Zhangfan";
 const PASS = "zhangfan0421";
 const KEY = "shaochi_v14_data";
+const APP_VERSION = "v1.0.0";
 const LOGIN = "shaochi_v14_login";
 const LOGIN_USER = "shaochi_v14_login_user";
 const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5R1WuM9tJN1wt3rnWczF0MOerC3RqmPtSdpg2BqsxAFU8MHZMG3-xw/exec";
@@ -193,6 +194,7 @@ function load() {
   if (!Array.isArray(db.categories)) db.categories = [];
   if (!db.settings || typeof db.settings !== "object") db.settings = {};
   if (!db.settings.systemName || ["紹馳車業", "紹馳技研"].includes(db.settings.systemName)) db.settings.systemName = "奇典動能";
+  if (!db.settings.version) db.settings.version = APP_VERSION;
   if (!Array.isArray(db.roles) || !db.roles.length) db.roles = DEFAULT_ROLES.map(role => ({ ...role, pages: role.pages.slice() }));
   if (!Array.isArray(db.employees) || !db.employees.length) {
     db.employees = [{ id: uid(), name: "管理員", username: USER, password: PASS, roleId: "admin", active: true }];
@@ -330,6 +332,11 @@ function loginEmployee(username, password) {
 function systemName() {
   const name = db.settings?.systemName || "奇典動能";
   return ["紹馳車業", "紹馳技研"].includes(name) ? "奇典動能" : name;
+}
+
+function systemVersion() {
+  const version = db.settings?.version || APP_VERSION;
+  return String(version).trim() || APP_VERSION;
 }
 
 function systemInitial() {
@@ -1140,6 +1147,14 @@ function renderSettings() {
         <p class="muted">會同步更新登入頁、側邊欄名稱與瀏覽器標題。</p>
       </section>
       <section class="settings-box">
+        <h3>版本號碼</h3>
+        <div class="settings-name-row">
+          <input id="systemVersionInput" value="${esc(systemVersion())}" placeholder="例如 v1.0.0">
+          <button type="button" id="saveSystemVersionBtn">儲存版本</button>
+        </div>
+        <p class="muted">目前版本：${esc(systemVersion())}</p>
+      </section>
+      <section class="settings-box">
         <h3>多機連線</h3>
         <p class="muted">輸入 Google Apps Script API URL 後，可讓多台電腦或手機共用同一份維修資料。</p>
         <label for="cloudApiUrlV108">雲端同步 API URL</label>
@@ -1777,6 +1792,13 @@ document.addEventListener("click", event => {
     if (!name) return alert("請輸入系統名稱");
     if (!db.settings || typeof db.settings !== "object") db.settings = {};
     db.settings.systemName = name;
+    save();
+  }
+  if (event.target.closest("#saveSystemVersionBtn")) {
+    const version = $("#systemVersionInput").value.trim();
+    if (!version) return alert("請輸入版本號碼");
+    if (!db.settings || typeof db.settings !== "object") db.settings = {};
+    db.settings.version = version;
     save();
   }
   if (event.target.closest("#addEmployeeBtn")) {
