@@ -169,6 +169,15 @@ const defaultCatalog = [
   { cat: "電系", name: "電瓶", price: 1200 }
 ];
 
+function normalizeCatalogItem(item) {
+  return {
+    cat: String(item?.cat || ""),
+    name: String(item?.name || ""),
+    price: Math.max(0, Number(item?.price || 0)),
+    cost: Math.max(0, Number(item?.cost || 0))
+  };
+}
+
 const pageTitles = {
   receive: "維修主畫面",
   appointments: "預約一覽",
@@ -208,6 +217,7 @@ function load() {
     roleId: employee.roleId || "technician",
     active: employee.active !== false
   }));
+  db.catalog = db.catalog.map(normalizeCatalogItem);
   db.categories = [...new Set([...db.categories, ...db.catalog.map(item => item.cat)].filter(Boolean))];
   db.orders = db.orders.map(normalizeOrder);
   repairOrderNumbers();
@@ -245,6 +255,11 @@ function normalizeOrder(order) {
     paid,
     laborCost: Number(order.laborCost || 0),
     internalCost: Number(order.internalCost || order.costTotal || 0),
+    costItems: Array.isArray(order.costItems) ? order.costItems.map(item => ({
+      name: String(item?.name || ""),
+      cost: Math.max(0, Number(item?.cost || 0)),
+      qty: Math.max(1, Number(item?.qty || 1))
+    })) : [],
     mechanicName: order.mechanicName || order.mechanic || "",
     workStatus,
     date: order.date || todayText(),
@@ -356,6 +371,8 @@ function applySystemSettings() {
 
 function ensureAccessData() {
   const allowedPages = PERMISSIONS.map(item => item[0]);
+  if (!Array.isArray(db.catalog)) db.catalog = defaultCatalog.slice();
+  db.catalog = db.catalog.map(normalizeCatalogItem);
   if (!Array.isArray(db.roles) || !db.roles.length) db.roles = DEFAULT_ROLES.map(role => ({ ...role, pages: role.pages.slice() }));
   DEFAULT_ROLES.forEach(defaultRole => {
     const existingRole = db.roles.find(role => role.id === defaultRole.id);
@@ -403,6 +420,10 @@ function partsTotal() {
   return selectedParts.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.qty || 1), 0);
 }
 
+function partsCostTotal() {
+  return selectedParts.reduce((sum, item) => sum + Number(item.cost || 0) * Number(item.qty || 1), 0);
+}
+
 function updateTotals() {
   const parts = partsTotal();
   const labor = Number($("#laborCost")?.value || 0);
@@ -424,7 +445,7 @@ function renderPartsPicker() {
   tabs.innerHTML = cats.map(cat => `<button type="button" class="parts-tab ${cat === currentPartCat ? "active" : ""}" data-cat="${esc(cat)}">${esc(cat)}</button>`).join("");
   grid.innerHTML = db.catalog
     .filter(item => item.cat === currentPartCat)
-    .map(item => `<button type="button" class="part-btn" data-part="${esc(item.name)}" data-price="${Number(item.price || 0)}"><b>${esc(item.name)}</b><span>${money(item.price)}</span></button>`)
+    .map(item => `<button type="button" class="part-btn" data-part="${esc(item.name)}" data-price="${Number(item.price || 0)}" data-catalog-index="${db.catalog.indexOf(item)}"><b>${esc(item.name)}</b><span>${money(item.price)}</span></button>`)
     .join("") || `<p class="muted">查無歷史維修紀錄</p>`;
 }
 
@@ -526,7 +547,13 @@ function loadOrderToReceive(order) {
   };
   draft = { plate: order.plate, km: Number(order.km || 0), customer };
   const parsed = parseOrderItems(order.items);
-  selectedParts = parsed.parts;
+  selectedParts = parsed.parts.map((part, index) => {
+    const storedCost = order.costItems?.[index]?.name === part.name
+      ? order.costItems[index]
+      : order.costItems?.find(item => item.name === part.name);
+    const catalogItem = db.catalog.find(item => item.name === part.name);
+    return { ...part, cost: Number(storedCost?.cost ?? catalogItem?.cost ?? 0) };
+  });
   $("#step1").classList.add("hide");
   $("#step2").classList.remove("hide");
   $("#showPlate").textContent = order.plate;
@@ -640,7 +667,10 @@ function createOrder(type = "工單") {
     amount: parts + labor,
     paid,
     laborCost: labor,
-    internalCost: 0,
+    internalCost: partsCostTotal(),
+    costItems: selectedParts
+      .filter(item => String(item.name || "").trim())
+      .map(item => ({ name: item.name.trim(), cost: Number(item.cost || 0), qty: Number(item.qty || 1) })),
     mechanicName: $("#mechanicSelect")?.value || currentEmployee()?.name || "",
     date: $("#repairDate")?.value || todayText(),
     workStatus: "待檢查"
@@ -1051,6 +1081,7 @@ function renderItemManager() {
         <div class="minor-add ymmis-item-add-row">
           <input id="newItemName" placeholder="新增維修項目">
           <input id="newItemPrice" type="number" min="0" placeholder="售價">
+          <input id="newItemCost" type="number" min="0" placeholder="成本（內部）">
           <button id="addItemBtn" type="button">新增項目</button>
         </div>
         <div class="minor-list ymmis-item-grid">
@@ -1058,11 +1089,12 @@ function renderItemManager() {
             const index = db.catalog.indexOf(item);
             return `<div class="minor-item compact" data-index="${index}">
               <div class="minor-display">
-                <b>${esc(item.name)} ${money(Number(item.price || 0))} - [0]</b>
+                <b>${esc(item.name)}｜售價 ${money(item.price)}｜成本 ${money(item.cost)}</b>
               </div>
               <div class="minor-edit-fields">
-                <input class="catalog-name" data-index="${index}" value="${esc(item.name)}">
-                <input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}">
+                <input class="catalog-name" data-index="${index}" value="${esc(item.name)}" aria-label="維修項目名稱">
+                <input class="catalog-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}" aria-label="售價">
+                <input class="catalog-cost" data-index="${index}" type="number" min="0" value="${Number(item.cost || 0)}" aria-label="內部成本">
               </div>
               <div class="minor-actions">
                 <button type="button" class="secondary toggleMinorEdit" data-index="${index}">修改</button>
@@ -1640,9 +1672,15 @@ document.addEventListener("click", event => {
   const part = event.target.closest("[data-part]");
   if (part) {
     const name = part.dataset.part;
+    const catalogItem = db.catalog[Number(part.dataset.catalogIndex)];
+    const cost = Number(catalogItem?.cost || 0);
     const existing = selectedParts.find(item => item.name === name);
-    if (existing) existing.qty += 1;
-    else selectedParts.push({ name, price: Number(part.dataset.price || 0), qty: 1 });
+    if (existing) {
+      existing.qty += 1;
+      existing.cost = cost;
+    } else {
+      selectedParts.push({ name, price: Number(part.dataset.price || 0), cost, qty: 1 });
+    }
     renderSelectedParts();
   }
   const removePart = event.target.closest(".part-remove");
@@ -1752,9 +1790,15 @@ document.addEventListener("click", event => {
     const cat = currentPartCat || $("#itemCatSelect")?.value || "";
     if (!cat) return alert("請先新增大項目");
     if (!name) return alert("請輸入小項目名稱");
-    db.catalog.push({ cat, name, price: Number($("#newItemPrice").value || 0) });
+    db.catalog.push({
+      cat,
+      name,
+      price: Number($("#newItemPrice").value || 0),
+      cost: Number($("#newItemCost").value || 0)
+    });
     $("#newItemName").value = "";
     $("#newItemPrice").value = "";
+    $("#newItemCost").value = "";
     save();
   }
   const deleteItem = event.target.closest(".deleteItem");
@@ -1778,6 +1822,10 @@ document.addEventListener("click", event => {
     const editing = row.classList.toggle("editing");
     row.classList.add("selected");
     toggleMinorEdit.textContent = editing ? "完成" : "修改";
+    if (!editing) {
+      renderPartsPicker();
+      renderItemManager();
+    }
   }
   const minorItem = event.target.closest(".minor-item");
   if (minorItem && !event.target.closest("button,input")) {
@@ -1907,6 +1955,11 @@ document.addEventListener("input", event => {
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
   }
+  if (event.target.matches(".catalog-cost") && db.catalog[index]) {
+    db.catalog[index].cost = Number(event.target.value || 0);
+    localStorage.setItem(KEY, JSON.stringify(db));
+    return;
+  }
 });
 
 document.addEventListener("compositionend", event => {
@@ -1920,7 +1973,7 @@ document.addEventListener("compositionend", event => {
 document.addEventListener("change", event => {
   if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
-  if (event.target.matches(".catalog-name,.catalog-price")) renderPartsPicker();
+  if (event.target.matches(".catalog-name,.catalog-price,.catalog-cost")) renderPartsPicker();
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
     const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
