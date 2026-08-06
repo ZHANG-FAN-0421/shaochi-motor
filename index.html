@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>奇典動能維修管理</title>
-  <link rel="stylesheet" href="css/style.css?v=20260807-defer-part-sync">
+  <link rel="stylesheet" href="css/style.css?v=20260807-part-editor">
 </head>
 <body>
   <section id="login" class="login">
@@ -180,6 +180,31 @@
     </div>
   </div>
 
+  <div id="partEditModal" class="edit-modal hide">
+    <form id="partEditForm" class="edit-panel part-edit-panel">
+      <div class="edit-head">
+        <h2 id="partEditTitle">修改維修項目</h2>
+        <button type="button" id="closePartEdit" class="edit-close">關閉</button>
+      </div>
+      <div class="part-edit-fields">
+        <label for="partEditName">維修項目名稱</label>
+        <input id="partEditName" autocomplete="off" spellcheck="false" placeholder="輸入維修項目名稱">
+        <div class="part-edit-number-row">
+          <div>
+            <label for="partEditPrice">單價</label>
+            <input id="partEditPrice" type="number" min="0" inputmode="numeric" value="0">
+          </div>
+          <div>
+            <label for="partEditQty">數量</label>
+            <input id="partEditQty" type="number" min="1" inputmode="numeric" value="1">
+          </div>
+        </div>
+      </div>
+      <p id="partEditError" class="part-edit-error"></p>
+      <button type="submit" class="edit-save">儲存維修項目</button>
+    </form>
+  </div>
+
 <div id="editOrderModal" class="edit-modal hide">
     <div class="edit-panel">
       <div class="edit-head">
@@ -198,6 +223,6 @@
     </div>
   </div>
 
-  <script src="js/app.js?v=20260807-defer-part-sync"></script>
+  <script src="js/app.js?v=20260807-part-editor"></script>
 </body>
 </html>
