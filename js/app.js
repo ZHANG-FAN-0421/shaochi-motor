@@ -448,6 +448,16 @@ function updatePartRowSubtotal(input) {
   if (item && subtotal) subtotal.textContent = money(Number(item.price || 0) * Number(item.qty || 1));
 }
 
+function commitPartInput(input) {
+  const index = Number(input.dataset.index);
+  if (!selectedParts[index]) return;
+  if (input.matches(".part-name")) selectedParts[index].name = input.value;
+  if (input.matches(".part-price")) selectedParts[index].price = Number(input.value || 0);
+  if (input.matches(".part-qty")) selectedParts[index].qty = Math.max(1, Number(input.value || 1));
+  updatePartRowSubtotal(input);
+  updateTotals();
+}
+
 function resetReceive() {
   editingOrderId = null;
   draft = { plate: "", km: 0, customer: null };
@@ -1838,22 +1848,7 @@ document.addEventListener("input", event => {
   }
   if (event.target.matches("#orderSearch,#quoteSearch,#customerSearch,#appointmentSearch,#appointmentPlate")) formatSearchPlateField(event.target);
   const index = Number(event.target.dataset.index);
-  if (event.target.matches(".part-name") && selectedParts[index]) {
-    selectedParts[index].name = event.target.value;
-    return;
-  }
-  if (event.target.matches(".part-price") && selectedParts[index]) {
-    selectedParts[index].price = Number(event.target.value || 0);
-    updatePartRowSubtotal(event.target);
-    updateTotals();
-    return;
-  }
-  if (event.target.matches(".part-qty") && selectedParts[index]) {
-    selectedParts[index].qty = Math.max(1, Number(event.target.value || 1));
-    updatePartRowSubtotal(event.target);
-    updateTotals();
-    return;
-  }
+  if (event.target.matches(".part-name,.part-price,.part-qty")) return;
   if (event.target.matches("#laborCost,#paidAmount")) updateTotals();
   if (event.target.matches("#search")) renderSearch();
   if (event.target.matches("#orderSearch,#quoteSearch")) renderOrders();
@@ -1888,6 +1883,7 @@ document.addEventListener("compositionend", event => {
 document.addEventListener("change", event => {
   if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
+  if (event.target.matches(".part-name,.part-price,.part-qty")) commitPartInput(event.target);
   if (event.target.matches(".catalog-name,.catalog-price")) renderPartsPicker();
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
@@ -1909,6 +1905,10 @@ document.addEventListener("change", event => {
     if (role.id === "admin" && !role.pages.includes("settings")) role.pages.push("settings");
     save();
   }
+});
+
+document.addEventListener("focusout", event => {
+  if (event.target.matches(".part-name,.part-price,.part-qty")) commitPartInput(event.target);
 });
 
 load();
