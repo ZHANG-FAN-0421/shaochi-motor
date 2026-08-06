@@ -64,10 +64,17 @@ const dateInputValue = value => {
 const normalizePlate = value => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const formatPlate = value => {
   const raw = normalizePlate(value);
-  const letters = raw.slice(0, 3).replace(/[^A-Z]/g, "");
-  const digits = raw.slice(3).replace(/[^0-9]/g, "").slice(0, 4);
-  if (letters.length < 3) return letters + digits;
-  return digits ? `${letters}-${digits}` : letters;
+  if (!raw) return "";
+  if (/^\d/.test(raw)) {
+    const digits = (raw.match(/^\d{0,4}/) || [""])[0];
+    const letters = raw.slice(digits.length).replace(/[^A-Z]/g, "").slice(0, 3);
+    if (!letters) return digits;
+    return digits.length >= 3 ? `${digits}-${letters}` : digits + letters;
+  }
+  const letters = (raw.match(/^[A-Z]{0,3}/) || [""])[0];
+  const digits = raw.slice(letters.length).replace(/[^0-9]/g, "").slice(0, 4);
+  if (!digits) return letters;
+  return letters.length >= 3 ? `${letters}-${digits}` : letters + digits;
 };
 const orderPrefix = type => String(type || "").includes("估價") ? "QT" : "RO";
 const orderDateKey = value => dateInputValue(value).replace(/-/g, "");
@@ -432,6 +439,13 @@ function renderSelectedParts() {
     </div>
   ` : `<div class="ymmis-empty">尚未加入維修項目</div>`;
   updateTotals();
+}
+
+function updatePartRowSubtotal(input) {
+  const index = Number(input.dataset.index);
+  const item = selectedParts[index];
+  const subtotal = input.closest(".part-row")?.querySelector(".part-row-subtotal");
+  if (item && subtotal) subtotal.textContent = money(Number(item.price || 0) * Number(item.qty || 1));
 }
 
 function resetReceive() {
@@ -1494,7 +1508,7 @@ function formatPlateField(input) {
 function formatSearchPlateField(input) {
   const value = String(input.value || "").trim();
   const raw = normalizePlate(value);
-  if (/^[A-Z]{1,3}\d/.test(raw) || /^[A-Z]{3}-?\d{1,4}$/i.test(value)) input.value = formatPlate(value);
+  if ((/^[A-Z]{1,3}\d/.test(raw) || /^\d{1,4}[A-Z]/.test(raw) || /^[A-Z]{3}-?\d{1,4}$/i.test(value) || /^\d{3,4}-?[A-Z]{1,3}$/i.test(value)) && /[A-Z]/.test(raw) && /\d/.test(raw)) input.value = formatPlate(value);
 }
 
 document.addEventListener("submit", event => {
@@ -1823,10 +1837,22 @@ document.addEventListener("input", event => {
   }
   if (event.target.matches("#orderSearch,#quoteSearch,#customerSearch,#appointmentSearch,#appointmentPlate")) formatSearchPlateField(event.target);
   const index = Number(event.target.dataset.index);
-  if (event.target.matches(".part-name") && selectedParts[index]) selectedParts[index].name = event.target.value;
-  if (event.target.matches(".part-price") && selectedParts[index]) selectedParts[index].price = Number(event.target.value || 0);
-  if (event.target.matches(".part-qty") && selectedParts[index]) selectedParts[index].qty = Math.max(1, Number(event.target.value || 1));
-  if (event.target.matches(".part-name,.part-price,.part-qty")) renderSelectedParts();
+  if (event.target.matches(".part-name") && selectedParts[index]) {
+    selectedParts[index].name = event.target.value;
+    return;
+  }
+  if (event.target.matches(".part-price") && selectedParts[index]) {
+    selectedParts[index].price = Number(event.target.value || 0);
+    updatePartRowSubtotal(event.target);
+    updateTotals();
+    return;
+  }
+  if (event.target.matches(".part-qty") && selectedParts[index]) {
+    selectedParts[index].qty = Math.max(1, Number(event.target.value || 1));
+    updatePartRowSubtotal(event.target);
+    updateTotals();
+    return;
+  }
   if (event.target.matches("#laborCost,#paidAmount")) updateTotals();
   if (event.target.matches("#search")) renderSearch();
   if (event.target.matches("#orderSearch,#quoteSearch")) renderOrders();
@@ -1837,17 +1863,22 @@ document.addEventListener("input", event => {
     renderCloudSettings();
     return;
   }
-  if (event.target.matches(".catalog-name") && db.catalog[index]) db.catalog[index].name = event.target.value;
-  if (event.target.matches(".catalog-price") && db.catalog[index]) db.catalog[index].price = Number(event.target.value || 0);
-  if (event.target.matches(".catalog-name,.catalog-price")) {
+  if (event.target.matches(".catalog-name") && db.catalog[index]) {
+    db.catalog[index].name = event.target.value;
     localStorage.setItem(KEY, JSON.stringify(db));
-    renderPartsPicker();
+    return;
+  }
+  if (event.target.matches(".catalog-price") && db.catalog[index]) {
+    db.catalog[index].price = Number(event.target.value || 0);
+    localStorage.setItem(KEY, JSON.stringify(db));
+    return;
   }
 });
 
 document.addEventListener("change", event => {
   if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
+  if (event.target.matches(".catalog-name,.catalog-price")) renderPartsPicker();
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
     const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
