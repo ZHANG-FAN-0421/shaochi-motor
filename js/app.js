@@ -34,7 +34,6 @@ let currentPartCat = "";
 let editingOrderId = null;
 let editingCustomerId = null;
 let editingEmployeeId = null;
-let editingPartIndex = null;
 let syncTimer = null;
 let applyingCloudData = false;
 
@@ -432,11 +431,10 @@ function renderPartsPicker() {
 function renderSelectedParts() {
   const rows = selectedParts.map((item, index) => `
     <div class="part-row ymmis-part-row">
-      <div class="part-value part-name-value">${esc(item.name || "未命名項目")}</div>
-      <div class="part-value part-price-value">${money(item.price)}</div>
-      <div class="part-value part-qty-value">${Number(item.qty || 1)}</div>
+      <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱" autocomplete="off" spellcheck="false">
+      <input class="part-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}" inputmode="numeric">
+      <input class="part-qty" data-index="${index}" type="number" min="1" value="${Number(item.qty || 1)}" inputmode="numeric">
       <div class="part-row-subtotal">${money(Number(item.price || 0) * Number(item.qty || 1))}</div>
-      <button type="button" class="part-edit" data-index="${index}">修改</button>
       <button type="button" class="part-remove" data-index="${index}">刪除</button>
     </div>
   `).join("");
@@ -444,7 +442,7 @@ function renderSelectedParts() {
   $("#selectedParts").innerHTML = selectedParts.length ? `
     <div class="ymmis-part-table">
       <div class="ymmis-part-head">
-        <span>維修項目</span><span>單價</span><span>數量</span><span>小計</span><span>操作</span>
+        <span>維修項目</span><span>單價</span><span>數量</span><span>小計</span><span>刪除</span>
       </div>
       ${rows}
     </div>
@@ -452,45 +450,31 @@ function renderSelectedParts() {
   updateTotals();
 }
 
-function openPartEditor(index = -1) {
-  editingPartIndex = index >= 0 ? index : null;
-  const item = editingPartIndex === null ? { name: "", price: 0, qty: 1 } : selectedParts[editingPartIndex];
+function updateSelectedPart(input) {
+  const index = Number(input.dataset.index);
+  const item = selectedParts[index];
   if (!item) return;
-  $("#partEditTitle").textContent = editingPartIndex === null ? "新增自訂品項" : "修改維修項目";
-  $("#partEditName").value = item.name || "";
-  $("#partEditPrice").value = Number(item.price || 0);
-  $("#partEditQty").value = Math.max(1, Number(item.qty || 1));
-  $("#partEditModal").classList.remove("hide");
-  requestAnimationFrame(() => $("#partEditName").focus());
+  if (input.matches(".part-name")) item.name = input.value;
+  if (input.matches(".part-price")) item.price = Math.max(0, Number(input.value || 0));
+  if (input.matches(".part-qty")) item.qty = Math.max(1, Number(input.value || 1));
+  const subtotal = input.closest(".part-row")?.querySelector(".part-row-subtotal");
+  if (subtotal) subtotal.textContent = money(Number(item.price || 0) * Number(item.qty || 1));
+  updateTotals();
 }
 
-function closePartEditor() {
-  $("#partEditModal").classList.add("hide");
-  editingPartIndex = null;
-}
-
-function savePartEditor() {
-  const name = $("#partEditName").value.trim();
-  if (!name) {
-    $("#partEditError").textContent = "請輸入維修項目名稱";
-    $("#partEditName").focus();
-    return;
-  }
-  const item = {
-    name,
-    price: Math.max(0, Number($("#partEditPrice").value || 0)),
-    qty: Math.max(1, Number($("#partEditQty").value || 1))
-  };
-  if (editingPartIndex === null) selectedParts.push(item);
-  else selectedParts[editingPartIndex] = item;
-  $("#partEditError").textContent = "";
-  closePartEditor();
-  renderSelectedParts();
+function syncSelectedPartInputs() {
+  $$("#selectedParts .part-row").forEach(row => {
+    const input = row.querySelector(".part-name");
+    if (input) updateSelectedPart(input);
+    const price = row.querySelector(".part-price");
+    if (price) updateSelectedPart(price);
+    const qty = row.querySelector(".part-qty");
+    if (qty) updateSelectedPart(qty);
+  });
 }
 
 function resetReceive() {
   editingOrderId = null;
-  closePartEditor();
   draft = { plate: "", km: 0, customer: null };
   selectedParts = [];
   $("#step1").reset();
@@ -631,6 +615,7 @@ function draftCustomerFromInputs() {
 }
 
 function createOrder(type = "工單") {
+  syncSelectedPartInputs();
   draftCustomerFromInputs();
   const parts = partsTotal();
   const labor = Number($("#laborCost").value || 0);
@@ -1517,7 +1502,7 @@ async function cloudDownload(options = {}) {
     localStorage.setItem(KEY, JSON.stringify(db));
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
     applyingCloudData = false;
-    render();
+    if ($("#step2")?.classList.contains("hide")) render();
     if (!options.silent) setCloudStatus("已從雲端下載", "ok");
     return true;
   } catch (error) {
@@ -1561,12 +1546,6 @@ function formatSearchPlateField(input) {
 }
 
 document.addEventListener("submit", event => {
-  if (event.target.id === "partEditForm") {
-    event.preventDefault();
-    savePartEditor();
-    return;
-  }
-
   if (event.target.id === "loginForm") {
     event.preventDefault();
     const employee = loginEmployee($("#user").value.trim(), $("#pass").value);
@@ -1646,7 +1625,12 @@ document.addEventListener("click", event => {
   if (event.target.closest("#createOrderBtn")) createOrder("工單");
   if (event.target.closest("#createQuoteBtn")) createOrder("估價單");
   if (event.target.closest("#addCustomItem")) {
-    openPartEditor();
+    selectedParts.push({ name: "", price: 0, qty: 1 });
+    renderSelectedParts();
+    requestAnimationFrame(() => {
+      const inputs = $$("#selectedParts .part-name");
+      inputs[inputs.length - 1]?.focus();
+    });
   }
   const tab = event.target.closest("[data-cat]");
   if (tab) {
@@ -1666,9 +1650,6 @@ document.addEventListener("click", event => {
     selectedParts.splice(Number(removePart.dataset.index), 1);
     renderSelectedParts();
   }
-  const editPart = event.target.closest(".part-edit");
-  if (editPart) openPartEditor(Number(editPart.dataset.index));
-  if (event.target.closest("#closePartEdit") || event.target.id === "partEditModal") closePartEditor();
   const edit = event.target.closest(".editOrder");
   if (edit) openEditOrder(edit.dataset.id);
   if (event.target.closest("#closeEditOrder")) $("#editOrderModal").classList.add("hide");
@@ -1895,14 +1876,17 @@ document.addEventListener("click", event => {
 });
 
 document.addEventListener("input", event => {
-  if (event.isComposing && event.target.matches(".part-name,.catalog-name")) return;
+  if (event.isComposing && event.target.matches(".catalog-name")) return;
   if (event.target.id === "plate") {
     formatPlateField(event.target);
     return;
   }
   if (event.target.matches("#orderSearch,#quoteSearch,#customerSearch,#appointmentSearch,#appointmentPlate")) formatSearchPlateField(event.target);
   const index = Number(event.target.dataset.index);
-  if (event.target.matches(".part-name,.part-price,.part-qty")) return;
+  if (event.target.matches(".part-name,.part-price,.part-qty")) {
+    updateSelectedPart(event.target);
+    return;
+  }
   if (event.target.matches("#laborCost,#paidAmount")) updateTotals();
   if (event.target.matches("#search")) renderSearch();
   if (event.target.matches("#orderSearch,#quoteSearch")) renderOrders();
