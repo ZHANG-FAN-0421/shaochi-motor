@@ -422,20 +422,22 @@ function renderPartsPicker() {
 }
 
 function renderSelectedParts() {
+  const rows = selectedParts.map((item, index) => `
+    <div class="part-row ymmis-part-row">
+      <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱" autocomplete="off" spellcheck="false">
+      <input class="part-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}" inputmode="numeric">
+      <input class="part-qty" data-index="${index}" type="number" min="1" value="${Number(item.qty || 1)}" inputmode="numeric">
+      <div class="part-row-subtotal">${money(Number(item.price || 0) * Number(item.qty || 1))}</div>
+      <button type="button" class="part-remove" data-index="${index}">刪除</button>
+    </div>
+  `).join("");
+
   $("#selectedParts").innerHTML = selectedParts.length ? `
     <div class="ymmis-part-table">
       <div class="ymmis-part-head">
         <span>維修項目</span><span>單價</span><span>數量</span><span>小計</span><span>刪除</span>
       </div>
-      ${selectedParts.map((item, index) => `
-        <div class="part-row ymmis-part-row">
-          <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱" autocomplete="off" spellcheck="false">
-          <input class="part-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}">
-          <input class="part-qty" data-index="${index}" type="number" min="1" value="${Number(item.qty || 1)}">
-          <div class="part-row-subtotal">${money(Number(item.price || 0) * Number(item.qty || 1))}</div>
-          <button type="button" class="part-remove" data-index="${index}">刪除</button>
-        </div>
-      `).join("")}
+      ${rows}
     </div>
   ` : `<div class="ymmis-empty">尚未加入維修項目</div>`;
   updateTotals();
