@@ -467,6 +467,15 @@ function commitPartInput(input) {
   updateTotals();
 }
 
+function syncSelectedPartInputs() {
+  $$("#selectedParts .part-row").forEach((row, index) => {
+    if (!selectedParts[index]) return;
+    selectedParts[index].name = row.querySelector(".part-name")?.value || "";
+    selectedParts[index].price = Number(row.querySelector(".part-price")?.value || 0);
+    selectedParts[index].qty = Math.max(1, Number(row.querySelector(".part-qty")?.value || 1));
+  });
+}
+
 function resetReceive() {
   editingOrderId = null;
   draft = { plate: "", km: 0, customer: null };
@@ -609,6 +618,7 @@ function draftCustomerFromInputs() {
 }
 
 function createOrder(type = "工單") {
+  syncSelectedPartInputs();
   draftCustomerFromInputs();
   const parts = partsTotal();
   const labor = Number($("#laborCost").value || 0);
@@ -1897,7 +1907,6 @@ document.addEventListener("input", event => {
 
 document.addEventListener("compositionend", event => {
   const index = Number(event.target.dataset.index);
-  if (event.target.matches(".part-name") && selectedParts[index]) selectedParts[index].name = event.target.value;
   if (event.target.matches(".catalog-name") && db.catalog[index]) {
     db.catalog[index].name = event.target.value;
     localStorage.setItem(KEY, JSON.stringify(db));
@@ -1907,7 +1916,6 @@ document.addEventListener("compositionend", event => {
 document.addEventListener("change", event => {
   if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
-  if (event.target.matches(".part-name,.part-price,.part-qty")) commitPartInput(event.target);
   if (event.target.matches(".catalog-name,.catalog-price")) renderPartsPicker();
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
@@ -1929,10 +1937,6 @@ document.addEventListener("change", event => {
     if (role.id === "admin" && !role.pages.includes("settings")) role.pages.push("settings");
     save();
   }
-});
-
-document.addEventListener("focusout", event => {
-  if (event.target.matches(".part-name,.part-price,.part-qty")) commitPartInput(event.target);
 });
 
 load();
