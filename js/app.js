@@ -429,11 +429,11 @@ function renderSelectedParts() {
       </div>
       ${selectedParts.map((item, index) => `
         <div class="part-row ymmis-part-row">
-          <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱">
+          <input class="part-name" data-index="${index}" value="${esc(item.name)}" placeholder="小項目名稱" autocomplete="off" spellcheck="false">
           <input class="part-price" data-index="${index}" type="number" min="0" value="${Number(item.price || 0)}">
           <input class="part-qty" data-index="${index}" type="number" min="1" value="${Number(item.qty || 1)}">
           <div class="part-row-subtotal">${money(Number(item.price || 0) * Number(item.qty || 1))}</div>
-          <button type="button" class="part-remove" data-index="${index}">刪</button>
+          <button type="button" class="part-remove" data-index="${index}">刪除</button>
         </div>
       `).join("")}
     </div>
@@ -1831,6 +1831,7 @@ document.addEventListener("click", event => {
 });
 
 document.addEventListener("input", event => {
+  if (event.isComposing && event.target.matches(".part-name,.catalog-name")) return;
   if (event.target.id === "plate") {
     formatPlateField(event.target);
     return;
@@ -1872,6 +1873,15 @@ document.addEventListener("input", event => {
     db.catalog[index].price = Number(event.target.value || 0);
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
+  }
+});
+
+document.addEventListener("compositionend", event => {
+  const index = Number(event.target.dataset.index);
+  if (event.target.matches(".part-name") && selectedParts[index]) selectedParts[index].name = event.target.value;
+  if (event.target.matches(".catalog-name") && db.catalog[index]) {
+    db.catalog[index].name = event.target.value;
+    localStorage.setItem(KEY, JSON.stringify(db));
   }
 });
 
