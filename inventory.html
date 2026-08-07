@@ -632,6 +632,12 @@
       font-size: 13px;
     }
 
+    .repair-pending {
+      color: var(--primary-2);
+      font-weight: 900;
+      font-size: 13px;
+    }
+
     .hidden { display: none !important; }
 
     @media (max-width: 1080px) {
@@ -1020,6 +1026,9 @@
     let lastCameraCode = "";
     let cloudSyncTimer = null;
     let cloudSyncInFlight = false;
+    let syncedRepairOrders = null;
+    let cloudSyncReady = false;
+    let autoRepairDeductionScheduled = false;
 
     const els = {
       viewTitle: document.querySelector("#viewTitle"),
@@ -1361,6 +1370,9 @@
       setCloudSyncStatus("Google 雲端同步中", "working");
       try {
         const cloudData = await fetchCloudData();
+        syncedRepairOrders = Array.isArray(cloudData?.orders) ? cloudData.orders : [];
+        cloudSyncReady = true;
+        queueAutoRepairDeduction();
         const cloudInventory = extractCloudInventory(cloudData);
         if (!cloudInventory) {
           if (!options.force && !localSyncMeta.dirty && !hadLocalInventory) {
@@ -1538,6 +1550,7 @@
         </article>
       `).join("");
       els.repairEmpty.classList.toggle("hidden", rows.length > 0);
+      queueAutoRepairDeduction();
     }
 
     function repairPartRow(order, part) {
@@ -1545,9 +1558,12 @@
       const done = isRepairPartLinked(order, part);
       const stockText = matched ? `${matched.name}｜目前 ${matched.stock}` : "庫存內找不到相同品名或料號";
       let action = `<span class="repair-miss">先建立庫存品項</span>`;
-      if (matched && done) action = `<span class="repair-done">已扣庫存</span>`;
+      if (matched && done) action = `<span class="repair-done">已自動扣庫存</span>`;
       if (matched && !done) {
-        action = `<button class="btn primary" onclick="applyRepairPart('${encodeURIComponent(repairOrderId(order))}', '${encodeURIComponent(part.name)}')">扣庫存</button>`;
+        const remainingQty = Math.max(0, part.qty - repairPartDeductedQty(order, part));
+        action = matched.stock >= remainingQty
+          ? `<span class="repair-pending">自動扣庫存中</span>`
+          : `<span class="repair-miss">庫存不足，補貨後自動扣</span>`;
       }
       return `
         <div class="repair-part">
@@ -1561,7 +1577,8 @@
     function loadRepairOrders() {
       try {
         const data = JSON.parse(localStorage.getItem(REPAIR_KEY) || "{}");
-        return (Array.isArray(data.orders) ? data.orders : [])
+        const sourceOrders = Array.isArray(syncedRepairOrders) ? syncedRepairOrders : (Array.isArray(data.orders) ? data.orders : []);
+        return sourceOrders
           .filter(order => !String(order.type || order.status || "").includes("估價"))
           .sort((a, b) => new Date(dateKey(b.date || b.createdAt || b.updatedAt)) - new Date(dateKey(a.date || a.createdAt || a.updatedAt)));
       } catch {
@@ -1617,8 +1634,43 @@
     }
 
     function isRepairPartLinked(order, part) {
+      return repairPartDeductedQty(order, part) >= part.qty;
+    }
+
+    function repairPartDeductedQty(order, part) {
       const key = repairLogKey(order, part);
-      return logs.some(log => log.source === "repair" && log.repairKey === key);
+      return logs
+        .filter(log => log.source === "repair" && log.repairKey === key && log.type === "out")
+        .reduce((sum, log) => sum + Number(log.qty || 0), 0);
+    }
+
+    function queueAutoRepairDeduction() {
+      if (!cloudSyncReady || autoRepairDeductionScheduled) return;
+      autoRepairDeductionScheduled = true;
+      setTimeout(() => {
+        autoRepairDeductionScheduled = false;
+        const deductions = [];
+        loadRepairOrders().forEach(order => {
+          parseRepairItems(order.items).forEach(part => {
+            const item = matchInventoryItem(part);
+            if (!item) return;
+            const remainingQty = Math.max(0, part.qty - repairPartDeductedQty(order, part));
+            if (!remainingQty || item.stock < remainingQty) return;
+            const orderDate = dateKey(order.date || order.createdAt || order.updatedAt) || new Date().toISOString().slice(0, 10);
+            const result = adjustStock(item, "out", remainingQty, orderDate, `維修工單 ${order.plate || ""} 自動扣庫存：${part.name}`, "repair", {
+              source: "repair",
+              repairKey: repairLogKey(order, part),
+              repairOrderId: repairOrderId(order),
+              repairPlate: order.plate || "",
+              repairPartName: part.name
+            });
+            if (result.ok) deductions.push({ name: part.name, qty: remainingQty });
+          });
+        });
+        if (!deductions.length) return;
+        persist();
+        render();
+      }, 0);
     }
 
     window.applyRepairPart = function(encodedOrderId, encodedPartName) {
