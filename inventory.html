@@ -1,0 +1,1772 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>奇典動能庫存管理系統</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef2f6;
+      --panel: #ffffff;
+      --panel-2: #f1f5f9;
+      --text: #061529;
+      --muted: #64748b;
+      --line: #cbd5e1;
+      --primary: #f59e0b;
+      --primary-2: #d97706;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --side: #0b1220;
+      --top: #1f2937;
+      --shadow: 0 10px 24px rgba(15, 23, 42, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button, input, select, textarea { font: inherit; }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      background: var(--side);
+      color: #f8fafc;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      border-right: 1px solid #1e293b;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 0 8px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f59e0b, #facc15);
+      color: #111827;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 20px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      display: block;
+      color: #cbd5e1;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    nav {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav-btn {
+      appearance: none;
+      border: 0;
+      width: 100%;
+      min-height: 42px;
+      border-radius: 4px;
+      padding: 12px 14px;
+      color: #dbeafe;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .nav-btn:hover, .nav-btn.active {
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 900;
+    }
+
+    .nav-icon {
+      width: 22px;
+      text-align: center;
+      font-size: 17px;
+    }
+
+    .sidebar-note {
+      margin-top: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.08);
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .side-link {
+      display: block;
+      color: #fbbf24;
+      font-weight: 900;
+      text-decoration: none;
+      margin-bottom: 10px;
+    }
+
+    main {
+      padding: 0;
+      min-width: 0;
+    }
+
+    .topbar {
+      background: var(--top);
+      color: #ffffff;
+      border-bottom: 3px solid #2563eb;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: 25px;
+      letter-spacing: 0;
+    }
+
+    .topbar p {
+      margin: 5px 0 0;
+      color: #f59e0b;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      font-size: 12px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel);
+      color: var(--text);
+      min-height: 39px;
+      padding: 8px 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn:hover { border-color: #bac9c0; }
+    .btn.primary { background: #f59e0b; border-color: #f59e0b; color: #111827; font-weight: 900; }
+    .btn.primary:hover { background: var(--primary-2); }
+    .btn.danger { color: var(--danger); border-color: #fecaca; }
+    .btn.icon { width: 38px; padding: 0; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 0 24px 16px;
+    }
+
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      min-height: 98px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 25px;
+      letter-spacing: 0;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 170px 160px 160px;
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 12px;
+      margin: 0 24px 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      background: white;
+      color: var(--text);
+      padding: 9px 10px;
+      min-height: 39px;
+      outline: none;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 84px;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(18, 107, 89, .12);
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+      padding: 0 24px 24px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .page-panel {
+      margin: 0 24px 24px;
+    }
+
+    .panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header h3 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f7faf8;
+      color: #4f5c56;
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tr:hover td { background: #f8fafc; }
+
+    .name-cell strong {
+      display: block;
+      font-size: 15px;
+    }
+
+    .name-cell span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: #405049;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .badge.low { background: #fff1d7; color: #8a4d00; }
+    .badge.out { background: #ffe5e1; color: var(--danger); }
+    .badge.ok { background: #e6f5ec; color: var(--ok); }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .form-body {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--panel-2);
+      padding: 4px;
+      border-radius: 8px;
+      gap: 4px;
+    }
+
+    .tab {
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      min-height: 36px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .tab.active {
+      background: white;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(17, 32, 25, .08);
+    }
+
+    .scan-grid {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 110px;
+      gap: 10px;
+    }
+
+    .scan-code {
+      font-size: 24px;
+      font-weight: 800;
+      min-height: 58px;
+      letter-spacing: 0;
+    }
+
+    .scan-result {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      min-height: 72px;
+      padding: 12px;
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      color: var(--muted);
+      background: #fbfcfb;
+    }
+
+    .scan-result strong {
+      color: var(--text);
+      font-size: 16px;
+    }
+
+    .scan-result.success {
+      border-color: #9ed2b4;
+      background: #eef9f2;
+    }
+
+    .scan-result.error {
+      border-color: #efb8b1;
+      background: #fff2f0;
+    }
+
+    .camera-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #101714;
+    }
+
+    .camera-box video {
+      display: block;
+      width: 100%;
+      max-height: 260px;
+      object-fit: cover;
+    }
+
+    .empty {
+      padding: 34px 16px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .log-list {
+      display: grid;
+      gap: 10px;
+      max-height: 360px;
+      overflow: auto;
+      padding: 14px 16px 16px;
+    }
+
+    .log-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfb;
+      display: grid;
+      gap: 4px;
+    }
+
+    .log-item strong {
+      font-size: 14px;
+    }
+
+    .log-item span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .log-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .log-head .btn {
+      min-height: 30px;
+      width: 30px;
+      flex: 0 0 auto;
+    }
+
+    .sync-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px 16px 0;
+    }
+
+    .sync-pill {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .sync-pill strong {
+      display: block;
+      color: var(--text);
+      font-size: 22px;
+      margin-top: 4px;
+    }
+
+    .repair-list {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .repair-card {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .repair-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .repair-head strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .repair-head span, .repair-part span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .repair-parts {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .repair-part {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(170px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 10px;
+    }
+
+    .repair-match {
+      color: var(--ok);
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .repair-miss {
+      color: var(--danger);
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .repair-done {
+      color: var(--muted);
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1080px) {
+      .app-shell { grid-template-columns: 1fr; }
+      aside {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding: 12px;
+      }
+      .brand, .sidebar-note { display: none; }
+      nav {
+        display: flex;
+        overflow-x: auto;
+      }
+      .nav-btn {
+        width: auto;
+        min-width: 118px;
+        justify-content: center;
+      }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .content-grid { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr 1fr; }
+      .repair-part { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      main { padding: 16px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .stats { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+      .sync-summary { grid-template-columns: 1fr; }
+      .actions { width: 100%; }
+      .actions .btn { flex: 1 1 auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside>
+      <div class="brand">
+        <div class="brand-mark">奇</div>
+        <div>
+          <h1>奇典動能庫存管理系統</h1>
+          <span>車輛、零件、耗材</span>
+        </div>
+      </div>
+      <nav aria-label="主要功能">
+        <button class="nav-btn active" data-view="inventory"><span class="nav-icon">▦</span>庫存總覽</button>
+        <button class="nav-btn" data-view="movement"><span class="nav-icon">↕</span>進出貨</button>
+        <button class="nav-btn" data-view="repair"><span class="nav-icon">⚙</span>維修連動</button>
+        <button class="nav-btn" data-view="alerts"><span class="nav-icon">!</span>低庫存</button>
+      </nav>
+      <div class="sidebar-note">
+        <a class="side-link" href="index.html">返回維修系統</a>
+        資料會保存在這台電腦的瀏覽器中。換瀏覽器或清除網站資料前，請先匯出 CSV 備份。
+      </div>
+    </aside>
+
+    <main>
+      <section class="topbar">
+        <div>
+          <p id="viewSubtitle">QI DIAN POWER</p>
+          <h2 id="viewTitle">庫存總覽</h2>
+        </div>
+        <div class="actions">
+          <button class="btn" id="importBtn">匯入 CSV</button>
+          <button class="btn" id="exportBtn">匯出 CSV</button>
+          <button class="btn primary" id="newItemBtn">新增品項</button>
+          <input class="hidden" type="file" id="importFile" accept=".csv,text/csv">
+        </div>
+      </section>
+
+      <section class="stats" aria-label="庫存統計">
+        <div class="stat"><span>庫存品項</span><strong id="statItems">0</strong></div>
+        <div class="stat"><span>庫存總值</span><strong id="statValue">$0</strong></div>
+        <div class="stat"><span>低庫存品項</span><strong id="statLow">0</strong></div>
+        <div class="stat"><span>本月異動</span><strong id="statMoves">0</strong></div>
+      </section>
+
+      <section id="inventoryView">
+        <div class="toolbar">
+          <div class="field">
+            <label for="searchInput">搜尋</label>
+            <input id="searchInput" type="search" placeholder="品名、料號、品牌、供應商">
+          </div>
+          <div class="field">
+            <label for="categoryFilter">分類</label>
+            <select id="categoryFilter">
+              <option value="">全部分類</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="statusFilter">狀態</label>
+            <select id="statusFilter">
+              <option value="">全部狀態</option>
+              <option value="ok">庫存正常</option>
+              <option value="low">低庫存</option>
+              <option value="out">缺貨</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sortSelect">排序</label>
+            <select id="sortSelect">
+              <option value="updatedDesc">最近更新</option>
+              <option value="nameAsc">品名 A-Z</option>
+              <option value="stockAsc">庫存由少到多</option>
+              <option value="valueDesc">總值由高到低</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="content-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>庫存清單</h3>
+              <span class="badge" id="resultCount">0 筆</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>品項</th>
+                    <th>分類</th>
+                    <th>庫存</th>
+                    <th>安全量</th>
+                    <th>單價</th>
+                    <th>總值</th>
+                    <th>供應商</th>
+                    <th>狀態</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="itemsTable"></tbody>
+              </table>
+            </div>
+            <div class="empty hidden" id="emptyState">目前沒有符合條件的庫存品項。</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3 id="formTitle">新增品項</h3>
+              <button class="btn icon" id="clearFormBtn" title="清空表單">×</button>
+            </div>
+            <form class="form-body" id="itemForm">
+              <input type="hidden" id="itemId">
+              <div class="field">
+                <label for="itemName">品名</label>
+                <input id="itemName" required placeholder="例如：10W-40 機油">
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="itemSku">料號 / 條碼 / 車牌</label>
+                  <input id="itemSku" placeholder="例如：OIL-1040">
+                </div>
+                <div class="field">
+                  <label for="itemCategory">分類</label>
+                  <input id="itemCategory" list="categoryList" required placeholder="零件">
+                  <datalist id="categoryList"></datalist>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="itemBrand">品牌 / 車廠</label>
+                  <input id="itemBrand" placeholder="例如：YAMAHA">
+                </div>
+                <div class="field">
+                  <label for="itemLocation">位置</label>
+                  <input id="itemLocation" placeholder="例如：A 架 2 層">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="itemStock">現有數量</label>
+                  <input id="itemStock" type="number" min="0" step="1" required>
+                </div>
+                <div class="field">
+                  <label for="itemMin">安全庫存</label>
+                  <input id="itemMin" type="number" min="0" step="1" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="itemCost">成本</label>
+                  <input id="itemCost" type="number" min="0" step="1">
+                </div>
+                <div class="field">
+                  <label for="itemPrice">售價</label>
+                  <input id="itemPrice" type="number" min="0" step="1" required>
+                </div>
+              </div>
+              <div class="field">
+                <label for="itemSupplier">供應商</label>
+                <input id="itemSupplier" placeholder="例如：XX 材料行">
+              </div>
+              <div class="field">
+                <label for="itemNote">備註</label>
+                <textarea id="itemNote" placeholder="適用車種、規格、叫貨注意事項"></textarea>
+              </div>
+              <button class="btn primary" type="submit">儲存品項</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="movementView" class="hidden">
+        <div class="content-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>掃描加減庫存</h3>
+              <span class="badge">掃描料號或條碼</span>
+            </div>
+            <form class="form-body" id="scanForm">
+              <div class="tabs" role="tablist">
+                <button class="tab scan-tab active" type="button" data-scan-type="in">掃描加庫存</button>
+                <button class="tab scan-tab" type="button" data-scan-type="out">掃描扣庫存</button>
+              </div>
+              <div class="scan-grid">
+                <div class="field">
+                  <label for="scanCode">條碼 / 料號</label>
+                  <input class="scan-code" id="scanCode" autocomplete="off" placeholder="掃描後按 Enter" required>
+                </div>
+                <div class="field">
+                  <label for="scanQty">數量</label>
+                  <input id="scanQty" type="number" min="1" step="1" value="1" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="scanDate">進出貨日期</label>
+                  <input id="scanDate" type="date" required>
+                </div>
+                <div class="field">
+                  <label for="scanPayment">付款方式</label>
+                  <select id="scanPayment" required>
+                    <option value="cash">現金</option>
+                    <option value="monthly">月結</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="scanNote">備註</label>
+                <input id="scanNote" placeholder="例如：掃描銷售、補貨入庫">
+              </div>
+              <div class="scan-result" id="scanResult">
+                <strong>等待掃描</strong>
+                <span>會比對品項的「料號 / 條碼 / 車牌」欄位，也可輸入完整品名。</span>
+              </div>
+              <div class="actions">
+                <button class="btn" type="button" id="startCameraBtn">開啟相機掃描</button>
+                <button class="btn hidden" type="button" id="stopCameraBtn">停止相機</button>
+              </div>
+              <div class="camera-box hidden" id="cameraBox">
+                <video id="scanVideo" muted playsinline></video>
+              </div>
+              <button class="btn primary" type="submit">執行掃描異動</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3>最近異動</h3>
+              <button class="btn danger" id="clearLogsBtn">清除紀錄</button>
+            </div>
+            <div class="log-list" id="logList"></div>
+            <div class="empty hidden" id="logEmpty">尚無進出貨紀錄。</div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <div class="panel-header">
+            <h3>手動進出貨登記</h3>
+          </div>
+          <form class="form-body" id="moveForm">
+            <div class="tabs" role="tablist">
+              <button class="tab move-tab active" type="button" data-move-type="in">進貨</button>
+              <button class="tab move-tab" type="button" data-move-type="out">出貨 / 維修使用</button>
+            </div>
+            <div class="field">
+              <label for="moveItem">品項</label>
+              <select id="moveItem" required></select>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="moveQty">數量</label>
+                <input id="moveQty" type="number" min="1" step="1" required>
+              </div>
+              <div class="field">
+                <label for="moveDate">進出貨日期</label>
+                <input id="moveDate" type="date" required>
+              </div>
+            </div>
+            <div class="field">
+              <label for="movePayment">付款方式</label>
+              <select id="movePayment" required>
+                <option value="cash">現金</option>
+                <option value="monthly">月結</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="moveNote">備註</label>
+              <textarea id="moveNote" placeholder="例如：客戶維修、補貨單號、供應商"></textarea>
+            </div>
+            <button class="btn primary" type="submit">登記異動</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="repairView" class="hidden">
+        <div class="panel page-panel">
+          <div class="panel-header">
+            <h3>維修系統連動扣庫存</h3>
+            <div class="actions">
+              <a class="btn" href="index.html">開啟維修系統</a>
+              <button class="btn primary" id="refreshRepairBtn" type="button">重新讀取工單</button>
+            </div>
+          </div>
+          <div class="sync-summary" id="repairSummary"></div>
+          <div class="repair-list" id="repairList"></div>
+          <div class="empty hidden" id="repairEmpty">目前讀不到維修工單，請先在維修系統建立正式工單。</div>
+        </div>
+      </section>
+
+      <section id="alertsView" class="hidden">
+        <div class="panel page-panel">
+          <div class="panel-header">
+            <h3>低庫存與缺貨品項</h3>
+            <span class="badge low" id="alertCount">0 筆需處理</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>品項</th>
+                  <th>分類</th>
+                  <th>目前庫存</th>
+                  <th>安全量</th>
+                  <th>建議補量</th>
+                  <th>供應商</th>
+                  <th>位置</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="alertsTable"></tbody>
+            </table>
+          </div>
+          <div class="empty hidden" id="alertsEmpty">所有品項都高於安全庫存。</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "motorcycle-shop-inventory-v1";
+    const LOG_KEY = "motorcycle-shop-inventory-logs-v1";
+    const REPAIR_KEY = "shaochi_v14_data";
+
+    const defaultItems = [
+      { id: crypto.randomUUID(), name: "10W-40 機油 1L", sku: "OIL-1040", category: "機油耗材", brand: "YAMAHA", location: "A1", stock: 18, min: 8, cost: 150, price: 250, supplier: "宏達材料", note: "常用保養品", updatedAt: new Date().toISOString() },
+      { id: crypto.randomUUID(), name: "前煞車皮 勁戰", sku: "BRK-CYGNUS-F", category: "煞車系統", brand: "副廠", location: "B2", stock: 5, min: 6, cost: 180, price: 350, supplier: "信昌零件", note: "適用三至五代", updatedAt: new Date().toISOString() },
+      { id: crypto.randomUUID(), name: "12V 電瓶 YTX7A-BS", sku: "BAT-YTX7A", category: "電瓶", brand: "GS", location: "C1", stock: 3, min: 2, cost: 780, price: 1200, supplier: "大新電池", note: "", updatedAt: new Date().toISOString() },
+      { id: crypto.randomUUID(), name: "輪胎 100/90-10", sku: "TIR-1009010", category: "輪胎", brand: "MAXXIS", location: "輪胎架", stock: 0, min: 4, cost: 850, price: 1300, supplier: "建輪輪胎", note: "缺貨需補", updatedAt: new Date().toISOString() }
+    ];
+
+    let items = loadItems();
+    let logs = loadLogs();
+    let currentMoveType = "in";
+    let currentScanType = "in";
+    let cameraStream = null;
+    let cameraDetector = null;
+    let cameraLoopActive = false;
+    let lastCameraCode = "";
+
+    const els = {
+      viewTitle: document.querySelector("#viewTitle"),
+      viewSubtitle: document.querySelector("#viewSubtitle"),
+      navBtns: document.querySelectorAll(".nav-btn"),
+      inventoryView: document.querySelector("#inventoryView"),
+      movementView: document.querySelector("#movementView"),
+      repairView: document.querySelector("#repairView"),
+      alertsView: document.querySelector("#alertsView"),
+      searchInput: document.querySelector("#searchInput"),
+      categoryFilter: document.querySelector("#categoryFilter"),
+      statusFilter: document.querySelector("#statusFilter"),
+      sortSelect: document.querySelector("#sortSelect"),
+      itemsTable: document.querySelector("#itemsTable"),
+      alertsTable: document.querySelector("#alertsTable"),
+      emptyState: document.querySelector("#emptyState"),
+      alertsEmpty: document.querySelector("#alertsEmpty"),
+      resultCount: document.querySelector("#resultCount"),
+      alertCount: document.querySelector("#alertCount"),
+      statItems: document.querySelector("#statItems"),
+      statValue: document.querySelector("#statValue"),
+      statLow: document.querySelector("#statLow"),
+      statMoves: document.querySelector("#statMoves"),
+      itemForm: document.querySelector("#itemForm"),
+      formTitle: document.querySelector("#formTitle"),
+      itemId: document.querySelector("#itemId"),
+      itemName: document.querySelector("#itemName"),
+      itemSku: document.querySelector("#itemSku"),
+      itemCategory: document.querySelector("#itemCategory"),
+      itemBrand: document.querySelector("#itemBrand"),
+      itemLocation: document.querySelector("#itemLocation"),
+      itemStock: document.querySelector("#itemStock"),
+      itemMin: document.querySelector("#itemMin"),
+      itemCost: document.querySelector("#itemCost"),
+      itemPrice: document.querySelector("#itemPrice"),
+      itemSupplier: document.querySelector("#itemSupplier"),
+      itemNote: document.querySelector("#itemNote"),
+      categoryList: document.querySelector("#categoryList"),
+      clearFormBtn: document.querySelector("#clearFormBtn"),
+      newItemBtn: document.querySelector("#newItemBtn"),
+      exportBtn: document.querySelector("#exportBtn"),
+      importBtn: document.querySelector("#importBtn"),
+      importFile: document.querySelector("#importFile"),
+      scanForm: document.querySelector("#scanForm"),
+      scanCode: document.querySelector("#scanCode"),
+      scanQty: document.querySelector("#scanQty"),
+      scanDate: document.querySelector("#scanDate"),
+      scanPayment: document.querySelector("#scanPayment"),
+      scanNote: document.querySelector("#scanNote"),
+      scanResult: document.querySelector("#scanResult"),
+      scanTabs: document.querySelectorAll(".scan-tab"),
+      startCameraBtn: document.querySelector("#startCameraBtn"),
+      stopCameraBtn: document.querySelector("#stopCameraBtn"),
+      cameraBox: document.querySelector("#cameraBox"),
+      scanVideo: document.querySelector("#scanVideo"),
+      moveForm: document.querySelector("#moveForm"),
+      moveItem: document.querySelector("#moveItem"),
+      moveQty: document.querySelector("#moveQty"),
+      moveDate: document.querySelector("#moveDate"),
+      movePayment: document.querySelector("#movePayment"),
+      moveNote: document.querySelector("#moveNote"),
+      moveTabs: document.querySelectorAll(".move-tab"),
+      logList: document.querySelector("#logList"),
+      logEmpty: document.querySelector("#logEmpty"),
+      clearLogsBtn: document.querySelector("#clearLogsBtn"),
+      refreshRepairBtn: document.querySelector("#refreshRepairBtn"),
+      repairSummary: document.querySelector("#repairSummary"),
+      repairList: document.querySelector("#repairList"),
+      repairEmpty: document.querySelector("#repairEmpty")
+    };
+
+    init();
+
+    function init() {
+      els.scanDate.valueAsDate = new Date();
+      els.moveDate.valueAsDate = new Date();
+      bindEvents();
+      render();
+    }
+
+    function bindEvents() {
+      els.navBtns.forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+      [els.searchInput, els.categoryFilter, els.statusFilter, els.sortSelect].forEach(el => el.addEventListener("input", renderInventory));
+      els.itemForm.addEventListener("submit", saveItem);
+      els.clearFormBtn.addEventListener("click", resetForm);
+      els.newItemBtn.addEventListener("click", () => {
+        switchView("inventory");
+        resetForm();
+        els.itemName.focus();
+      });
+      els.exportBtn.addEventListener("click", exportCsv);
+      els.importBtn.addEventListener("click", () => els.importFile.click());
+      els.importFile.addEventListener("change", importCsv);
+      els.scanTabs.forEach(tab => tab.addEventListener("click", () => setScanType(tab.dataset.scanType)));
+      els.scanForm.addEventListener("submit", saveScannedMovement);
+      els.startCameraBtn.addEventListener("click", startCameraScan);
+      els.stopCameraBtn.addEventListener("click", stopCameraScan);
+      els.moveTabs.forEach(tab => tab.addEventListener("click", () => setMoveType(tab.dataset.moveType)));
+      els.moveForm.addEventListener("submit", saveMovement);
+      els.clearLogsBtn.addEventListener("click", clearLogs);
+      els.refreshRepairBtn.addEventListener("click", renderRepairLink);
+    }
+
+    function loadItems() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultItems));
+        return defaultItems;
+      }
+      try { return JSON.parse(saved); } catch { return defaultItems; }
+    }
+
+    function loadLogs() {
+      const saved = localStorage.getItem(LOG_KEY);
+      if (!saved) return [];
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+
+    function persist() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+    }
+
+    function render() {
+      renderStats();
+      renderCategories();
+      renderInventory();
+      renderMoveOptions();
+      renderLogs();
+      renderRepairLink();
+      renderAlerts();
+    }
+
+    function renderStats() {
+      const totalValue = items.reduce((sum, item) => sum + item.stock * item.price, 0);
+      const lowCount = items.filter(item => item.stock <= item.min).length;
+      const month = new Date().toISOString().slice(0, 7);
+      const monthlyMoves = logs.filter(log => log.date.startsWith(month)).length;
+      els.statItems.textContent = items.length;
+      els.statValue.textContent = money(totalValue);
+      els.statLow.textContent = lowCount;
+      els.statMoves.textContent = monthlyMoves;
+    }
+
+    function renderCategories() {
+      const categories = [...new Set(items.map(item => item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+      const selected = els.categoryFilter.value;
+      els.categoryFilter.innerHTML = '<option value="">全部分類</option>' + categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join("");
+      els.categoryFilter.value = categories.includes(selected) ? selected : "";
+      els.categoryList.innerHTML = categories.map(cat => `<option value="${escapeHtml(cat)}"></option>`).join("");
+    }
+
+    function renderInventory() {
+      const visible = getFilteredItems();
+      els.resultCount.textContent = `${visible.length} 筆`;
+      els.itemsTable.innerHTML = visible.map(item => `
+        <tr>
+          <td class="name-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.sku || "無料號")} · ${escapeHtml(item.brand || "未填品牌")}</span></td>
+          <td>${escapeHtml(item.category)}</td>
+          <td>${item.stock}</td>
+          <td>${item.min}</td>
+          <td>${money(item.price)}</td>
+          <td>${money(item.price * item.stock)}</td>
+          <td>${escapeHtml(item.supplier || "-")}</td>
+          <td>${statusBadge(item)}</td>
+          <td>
+            <div class="row-actions">
+              <button class="btn icon" title="編輯" onclick="editItem('${item.id}')">✎</button>
+              <button class="btn icon danger" title="刪除" onclick="deleteItem('${item.id}')">×</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+      els.emptyState.classList.toggle("hidden", visible.length > 0);
+    }
+
+    function getFilteredItems() {
+      const keyword = els.searchInput.value.trim().toLowerCase();
+      const category = els.categoryFilter.value;
+      const status = els.statusFilter.value;
+      const sort = els.sortSelect.value;
+      let visible = items.filter(item => {
+        const haystack = [item.name, item.sku, item.brand, item.supplier, item.category, item.location, item.note].join(" ").toLowerCase();
+        return (!keyword || haystack.includes(keyword)) &&
+          (!category || item.category === category) &&
+          (!status || getStatus(item) === status);
+      });
+      visible.sort((a, b) => {
+        if (sort === "nameAsc") return a.name.localeCompare(b.name, "zh-Hant");
+        if (sort === "stockAsc") return a.stock - b.stock;
+        if (sort === "valueDesc") return (b.stock * b.price) - (a.stock * a.price);
+        return new Date(b.updatedAt) - new Date(a.updatedAt);
+      });
+      return visible;
+    }
+
+    function renderMoveOptions() {
+      els.moveItem.innerHTML = items
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"))
+        .map(item => `<option value="${item.id}">${escapeHtml(item.name)}（目前 ${item.stock}）</option>`)
+        .join("");
+    }
+
+    function renderLogs() {
+      const recent = logs.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 30);
+      els.logList.innerHTML = recent.map(log => `
+        <div class="log-item">
+          <div class="log-head">
+            <strong>${log.type === "in" ? "進貨" : "出貨"} ${log.qty}：${escapeHtml(log.itemName)}</strong>
+            <button class="btn icon danger" title="刪除紀錄" onclick="deleteLog('${log.id}')">×</button>
+          </div>
+          <span>${formatLogDate(log.date)} · 付款：${paymentLabel(log.paymentMethod)} · ${escapeHtml(log.note || "無備註")}</span>
+        </div>
+      `).join("");
+      els.logEmpty.classList.toggle("hidden", recent.length > 0);
+    }
+
+    function renderRepairLink() {
+      const orders = loadRepairOrders();
+      const rows = orders.map(order => {
+        const parts = parseRepairItems(order.items);
+        return { order, parts };
+      }).filter(row => row.parts.length);
+
+      const totalParts = rows.reduce((sum, row) => sum + row.parts.length, 0);
+      const linkedParts = rows.reduce((sum, row) => sum + row.parts.filter(part => isRepairPartLinked(row.order, part)).length, 0);
+      const matchedParts = rows.reduce((sum, row) => sum + row.parts.filter(part => matchInventoryItem(part)).length, 0);
+      els.repairSummary.innerHTML = `
+        <div class="sync-pill">讀到正式工單<strong>${orders.length}</strong></div>
+        <div class="sync-pill">可比對零件<strong>${matchedParts} / ${totalParts}</strong></div>
+        <div class="sync-pill">已扣庫存<strong>${linkedParts}</strong></div>
+      `;
+
+      els.repairList.innerHTML = rows.map(({ order, parts }) => `
+        <article class="repair-card">
+          <div class="repair-head">
+            <div>
+              <strong>${escapeHtml(order.plate || "無車牌")}｜${escapeHtml(order.name || "未填客戶")}</strong>
+              <span>${formatLogDate(dateKey(order.date || order.createdAt || order.updatedAt))} · ${escapeHtml(order.status || order.workStatus || "工單")}</span>
+            </div>
+            <span class="badge">${money(order.amount || 0)}</span>
+          </div>
+          <div class="repair-parts">
+            ${parts.map(part => repairPartRow(order, part)).join("")}
+          </div>
+        </article>
+      `).join("");
+      els.repairEmpty.classList.toggle("hidden", rows.length > 0);
+    }
+
+    function repairPartRow(order, part) {
+      const matched = matchInventoryItem(part);
+      const done = isRepairPartLinked(order, part);
+      const stockText = matched ? `${matched.name}｜目前 ${matched.stock}` : "庫存內找不到相同品名或料號";
+      let action = `<span class="repair-miss">先建立庫存品項</span>`;
+      if (matched && done) action = `<span class="repair-done">已扣庫存</span>`;
+      if (matched && !done) {
+        action = `<button class="btn primary" onclick="applyRepairPart('${encodeURIComponent(repairOrderId(order))}', '${encodeURIComponent(part.name)}')">扣庫存</button>`;
+      }
+      return `
+        <div class="repair-part">
+          <div><strong>${escapeHtml(part.name)}</strong><span>維修使用數量 ${part.qty}</span></div>
+          <div class="${matched ? "repair-match" : "repair-miss"}">${escapeHtml(stockText)}</div>
+          <div>${action}</div>
+        </div>
+      `;
+    }
+
+    function loadRepairOrders() {
+      try {
+        const data = JSON.parse(localStorage.getItem(REPAIR_KEY) || "{}");
+        return (Array.isArray(data.orders) ? data.orders : [])
+          .filter(order => !String(order.type || order.status || "").includes("估價"))
+          .sort((a, b) => new Date(dateKey(b.date || b.createdAt || b.updatedAt)) - new Date(dateKey(a.date || a.createdAt || a.updatedAt)));
+      } catch {
+        return [];
+      }
+    }
+
+    function parseRepairItems(value) {
+      const rawParts = [];
+      if (Array.isArray(value)) {
+        value.forEach(part => rawParts.push({ name: part.name || "", qty: Math.max(1, numberValue(part.qty || 1)) }));
+      } else {
+        String(value || "").split("\n").forEach(line => {
+          const match = line.trim().match(/^(.*?)\s+x(\d+)\s+\$([\d,]+)$/);
+          if (match) rawParts.push({ name: match[1].trim(), qty: Math.max(1, Number(match[2] || 1)) });
+        });
+      }
+
+      const combined = new Map();
+      rawParts.forEach(part => {
+        const name = part.name.trim();
+        if (!name) return;
+        const key = normalizeCode(name);
+        const existing = combined.get(key) || { name, qty: 0 };
+        existing.qty += part.qty;
+        combined.set(key, existing);
+      });
+      return [...combined.values()];
+    }
+
+    function matchInventoryItem(part) {
+      const name = normalizeCode(part.name);
+      if (!name) return null;
+      return items.find(item => {
+        const itemName = normalizeCode(item.name);
+        const sku = normalizeCode(item.sku);
+        return itemName === name || (sku && sku === name);
+      }) || items.find(item => {
+        const itemName = normalizeCode(item.name);
+        return itemName && (itemName.includes(name) || name.includes(itemName));
+      }) || items.find(item => {
+        const sku = normalizeCode(item.sku);
+        return sku && (sku.includes(name) || name.includes(sku));
+      });
+    }
+
+    function repairOrderId(order) {
+      return String(order.id || [order.plate, order.date, order.km, order.amount].join("|"));
+    }
+
+    function repairLogKey(order, part) {
+      return `${repairOrderId(order)}::${normalizeCode(part.name)}`;
+    }
+
+    function isRepairPartLinked(order, part) {
+      const key = repairLogKey(order, part);
+      return logs.some(log => log.source === "repair" && log.repairKey === key);
+    }
+
+    window.applyRepairPart = function(encodedOrderId, encodedPartName) {
+      const orderId = decodeURIComponent(encodedOrderId);
+      const partName = decodeURIComponent(encodedPartName);
+      const order = loadRepairOrders().find(current => repairOrderId(current) === orderId);
+      if (!order) {
+        alert("找不到這張維修工單，請重新讀取。");
+        return;
+      }
+      const part = parseRepairItems(order.items).find(current => normalizeCode(current.name) === normalizeCode(partName));
+      if (!part) {
+        alert("找不到這個維修項目，請重新讀取。");
+        return;
+      }
+      if (isRepairPartLinked(order, part)) {
+        alert("這個維修項目已經扣過庫存。");
+        return;
+      }
+      const item = matchInventoryItem(part);
+      if (!item) {
+        alert(`庫存內找不到「${part.name}」，請先新增同名品項或料號。`);
+        return;
+      }
+      const orderDate = dateKey(order.date || order.createdAt || order.updatedAt) || new Date().toISOString().slice(0, 10);
+      const result = adjustStock(item, "out", part.qty, orderDate, `維修工單 ${order.plate || ""} 使用：${part.name}`, "repair", {
+        source: "repair",
+        repairKey: repairLogKey(order, part),
+        repairOrderId: repairOrderId(order),
+        repairPlate: order.plate || "",
+        repairPartName: part.name
+      });
+      if (!result.ok) {
+        alert(result.message);
+        return;
+      }
+      persist();
+      render();
+    };
+
+    function renderAlerts() {
+      const alerts = items.filter(item => item.stock <= item.min).sort((a, b) => a.stock - b.stock);
+      els.alertCount.textContent = `${alerts.length} 筆需處理`;
+      els.alertsTable.innerHTML = alerts.map(item => `
+        <tr>
+          <td class="name-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.sku || "無料號")}</span></td>
+          <td>${escapeHtml(item.category)}</td>
+          <td>${item.stock}</td>
+          <td>${item.min}</td>
+          <td>${Math.max(item.min * 2 - item.stock, 1)}</td>
+          <td>${escapeHtml(item.supplier || "-")}</td>
+          <td>${escapeHtml(item.location || "-")}</td>
+          <td><button class="btn" onclick="quickRestock('${item.id}')">快速補貨</button></td>
+        </tr>
+      `).join("");
+      els.alertsEmpty.classList.toggle("hidden", alerts.length > 0);
+    }
+
+    function saveItem(event) {
+      event.preventDefault();
+      const id = els.itemId.value || crypto.randomUUID();
+      const existing = items.find(item => item.id === id);
+      const item = {
+        id,
+        name: els.itemName.value.trim(),
+        sku: els.itemSku.value.trim(),
+        category: els.itemCategory.value.trim(),
+        brand: els.itemBrand.value.trim(),
+        location: els.itemLocation.value.trim(),
+        stock: numberValue(els.itemStock.value),
+        min: numberValue(els.itemMin.value),
+        cost: numberValue(els.itemCost.value),
+        price: numberValue(els.itemPrice.value),
+        supplier: els.itemSupplier.value.trim(),
+        note: els.itemNote.value.trim(),
+        updatedAt: new Date().toISOString()
+      };
+      if (existing) {
+        items = items.map(current => current.id === id ? item : current);
+      } else {
+        items.unshift(item);
+      }
+      persist();
+      resetForm();
+      render();
+    }
+
+    window.editItem = function(id) {
+      const item = items.find(current => current.id === id);
+      if (!item) return;
+      els.formTitle.textContent = "編輯品項";
+      els.itemId.value = item.id;
+      els.itemName.value = item.name;
+      els.itemSku.value = item.sku;
+      els.itemCategory.value = item.category;
+      els.itemBrand.value = item.brand;
+      els.itemLocation.value = item.location;
+      els.itemStock.value = item.stock;
+      els.itemMin.value = item.min;
+      els.itemCost.value = item.cost;
+      els.itemPrice.value = item.price;
+      els.itemSupplier.value = item.supplier;
+      els.itemNote.value = item.note;
+      els.itemName.focus();
+    };
+
+    window.deleteItem = function(id) {
+      const item = items.find(current => current.id === id);
+      if (!item || !confirm(`確定刪除「${item.name}」？`)) return;
+      items = items.filter(current => current.id !== id);
+      logs = logs.filter(log => log.itemId !== id);
+      persist();
+      resetForm();
+      render();
+    };
+
+    window.quickRestock = function(id) {
+      switchView("movement");
+      setMoveType("in");
+      els.moveItem.value = id;
+      const item = items.find(current => current.id === id);
+      els.moveQty.value = item ? Math.max(item.min * 2 - item.stock, 1) : 1;
+      els.moveNote.value = "低庫存快速補貨";
+    };
+
+    function saveScannedMovement(event) {
+      event.preventDefault();
+      const code = normalizeCode(els.scanCode.value);
+      const qty = Math.max(numberValue(els.scanQty.value), 1);
+      const item = findScannedItem(code);
+      if (!item) {
+        showScanResult("error", "找不到品項", `沒有料號、條碼或品名符合「${els.scanCode.value.trim()}」。`);
+        els.scanCode.select();
+        return;
+      }
+      const result = adjustStock(item, currentScanType, qty, els.scanDate.value, els.scanNote.value.trim() || "掃描異動", els.scanPayment.value);
+      if (!result.ok) {
+        showScanResult("error", "庫存不足", result.message);
+        els.scanCode.select();
+        return;
+      }
+      persist();
+      render();
+      showScanResult("success", `${currentScanType === "in" ? "已加庫存" : "已扣庫存"}：${item.name}`, `${formatLogDate(els.scanDate.value)}，${paymentLabel(els.scanPayment.value)}，數量 ${qty}，目前庫存 ${item.stock}`);
+      els.scanCode.value = "";
+      els.scanQty.value = 1;
+      els.scanCode.focus();
+    }
+
+    function saveMovement(event) {
+      event.preventDefault();
+      const item = items.find(current => current.id === els.moveItem.value);
+      if (!item) return;
+      const qty = numberValue(els.moveQty.value);
+      const result = adjustStock(item, currentMoveType, qty, els.moveDate.value, els.moveNote.value.trim(), els.movePayment.value);
+      if (!result.ok) {
+        alert(result.message);
+        return;
+      }
+      persist();
+      els.moveQty.value = "";
+      els.moveNote.value = "";
+      render();
+    }
+
+    function adjustStock(item, type, qty, date, note, paymentMethod = "cash", meta = {}) {
+      if (!qty || qty < 1) {
+        return { ok: false, message: "數量必須大於 0。" };
+      }
+      if (!date) {
+        return { ok: false, message: "請選擇進出貨日期。" };
+      }
+      if (type === "out" && qty > item.stock) {
+        return { ok: false, message: `「${item.name}」目前庫存只有 ${item.stock}，不可扣 ${qty}。` };
+      }
+      item.stock = type === "in" ? item.stock + qty : item.stock - qty;
+      item.updatedAt = new Date().toISOString();
+      logs.push({
+        id: crypto.randomUUID(),
+        itemId: item.id,
+        itemName: item.name,
+        type,
+        qty,
+        date,
+        paymentMethod,
+        note,
+        createdAt: new Date().toISOString(),
+        ...meta
+      });
+      return { ok: true };
+    }
+
+    window.deleteLog = function(id) {
+      const log = logs.find(current => current.id === id);
+      if (!log) return;
+      const item = items.find(current => current.id === log.itemId);
+      const actionText = log.type === "in" ? "進貨" : "出貨";
+      const restoreText = item ? "庫存會同步回復。" : "找不到原品項，只會刪除紀錄。";
+      if (!confirm(`確定刪除這筆「${actionText} ${log.qty}：${log.itemName}」紀錄？${restoreText}`)) return;
+
+      if (item) {
+        if (log.type === "in" && item.stock < log.qty) {
+          alert(`目前「${item.name}」庫存只有 ${item.stock}，無法回復這筆進貨 ${log.qty}。`);
+          return;
+        }
+        item.stock = log.type === "in" ? item.stock - log.qty : item.stock + log.qty;
+        item.updatedAt = new Date().toISOString();
+      }
+
+      logs = logs.filter(current => current.id !== id);
+      persist();
+      render();
+    };
+
+    function findScannedItem(code) {
+      if (!code) return null;
+      return items.find(item => normalizeCode(item.sku) === code)
+        || items.find(item => normalizeCode(item.name) === code)
+        || items.find(item => normalizeCode(item.sku).includes(code) || normalizeCode(item.name).includes(code));
+    }
+
+    function showScanResult(type, title, detail) {
+      els.scanResult.classList.remove("success", "error");
+      if (type) els.scanResult.classList.add(type);
+      els.scanResult.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`;
+    }
+
+    async function startCameraScan() {
+      if (!("BarcodeDetector" in window)) {
+        showScanResult("error", "此瀏覽器不支援相機條碼掃描", "可改用 USB/藍牙條碼掃描器，或直接輸入料號後按 Enter。");
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        showScanResult("error", "無法開啟相機", "目前瀏覽器或頁面環境不支援相機存取。");
+        return;
+      }
+      try {
+        const preferredFormats = ["code_128", "code_39", "ean_13", "ean_8", "qr_code", "upc_a", "upc_e"];
+        const supportedFormats = await BarcodeDetector.getSupportedFormats();
+        const formats = preferredFormats.filter(format => supportedFormats.includes(format));
+        cameraDetector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        els.scanVideo.srcObject = cameraStream;
+        await els.scanVideo.play();
+        cameraLoopActive = true;
+        els.cameraBox.classList.remove("hidden");
+        els.startCameraBtn.classList.add("hidden");
+        els.stopCameraBtn.classList.remove("hidden");
+        showScanResult("", "相機掃描中", "將條碼放入畫面，掃到後會自動加減庫存。");
+        scanCameraFrame();
+      } catch (error) {
+        showScanResult("error", "無法開啟相機", "請確認已允許相機權限，或改用掃描槍/手動輸入。");
+        stopCameraScan();
+      }
+    }
+
+    async function scanCameraFrame() {
+      if (!cameraLoopActive || !cameraDetector) return;
+      try {
+        const codes = await cameraDetector.detect(els.scanVideo);
+        const rawValue = codes[0]?.rawValue?.trim();
+        if (rawValue && rawValue !== lastCameraCode) {
+          lastCameraCode = rawValue;
+          els.scanCode.value = rawValue;
+          els.scanForm.requestSubmit();
+          setTimeout(() => { lastCameraCode = ""; }, 1200);
+        }
+      } catch {
+        showScanResult("error", "相機掃描暫停", "條碼偵測失敗，請重新開啟相機或改用掃描槍。");
+        stopCameraScan();
+        return;
+      }
+      requestAnimationFrame(scanCameraFrame);
+    }
+
+    function stopCameraScan() {
+      cameraLoopActive = false;
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+      cameraStream = null;
+      cameraDetector = null;
+      els.scanVideo.srcObject = null;
+      els.cameraBox.classList.add("hidden");
+      els.startCameraBtn.classList.remove("hidden");
+      els.stopCameraBtn.classList.add("hidden");
+    }
+
+    function clearLogs() {
+      if (!logs.length || !confirm("確定清除所有進出貨紀錄？庫存數量不會回復。")) return;
+      logs = [];
+      persist();
+      render();
+    }
+
+    function resetForm() {
+      els.formTitle.textContent = "新增品項";
+      els.itemForm.reset();
+      els.itemId.value = "";
+      els.itemStock.value = 0;
+      els.itemMin.value = 1;
+      els.itemCost.value = 0;
+      els.itemPrice.value = 0;
+    }
+
+    function switchView(view) {
+      els.navBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+      els.inventoryView.classList.toggle("hidden", view !== "inventory");
+      els.movementView.classList.toggle("hidden", view !== "movement");
+      els.repairView.classList.toggle("hidden", view !== "repair");
+      els.alertsView.classList.toggle("hidden", view !== "alerts");
+      const titles = {
+        inventory: ["庫存總覽", "QI DIAN POWER"],
+        movement: ["掃描加減庫存", "QI DIAN POWER"],
+        repair: ["維修連動", "QI DIAN POWER"],
+        alerts: ["低庫存", "QI DIAN POWER"]
+      };
+      els.viewTitle.textContent = titles[view][0];
+      els.viewSubtitle.textContent = titles[view][1];
+      if (view === "movement") {
+        setTimeout(() => els.scanCode.focus(), 0);
+      } else {
+        stopCameraScan();
+      }
+    }
+
+    function setMoveType(type) {
+      currentMoveType = type;
+      els.moveTabs.forEach(tab => tab.classList.toggle("active", tab.dataset.moveType === type));
+    }
+
+    function setScanType(type) {
+      currentScanType = type;
+      els.scanTabs.forEach(tab => tab.classList.toggle("active", tab.dataset.scanType === type));
+      els.scanCode.focus();
+    }
+
+    function getStatus(item) {
+      if (item.stock === 0) return "out";
+      if (item.stock <= item.min) return "low";
+      return "ok";
+    }
+
+    function statusBadge(item) {
+      const status = getStatus(item);
+      if (status === "out") return '<span class="badge out">缺貨</span>';
+      if (status === "low") return '<span class="badge low">低庫存</span>';
+      return '<span class="badge ok">正常</span>';
+    }
+
+    function paymentLabel(value) {
+      if (value === "monthly") return "月結";
+      if (value === "cash") return "現金";
+      if (value === "repair") return "維修使用";
+      return "未紀錄";
+    }
+
+    function formatLogDate(value) {
+      const date = new Date(`${value}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return escapeHtml(value || "未填日期");
+      return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+    }
+
+    function dateKey(value) {
+      const text = String(value || "").trim();
+      const match = text.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+      if (match) return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) return "";
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+
+    function exportCsv() {
+      const header = ["品名","料號","分類","品牌","位置","庫存","安全庫存","成本","售價","供應商","備註"];
+      const rows = items.map(item => [item.name,item.sku,item.category,item.brand,item.location,item.stock,item.min,item.cost,item.price,item.supplier,item.note]);
+      const csv = [header, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
+      const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `奇典動能庫存_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importCsv(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const rows = parseCsv(reader.result).slice(1);
+        const imported = rows.filter(row => row[0]).map(row => ({
+          id: crypto.randomUUID(),
+          name: row[0] || "",
+          sku: row[1] || "",
+          category: row[2] || "未分類",
+          brand: row[3] || "",
+          location: row[4] || "",
+          stock: numberValue(row[5]),
+          min: numberValue(row[6]),
+          cost: numberValue(row[7]),
+          price: numberValue(row[8]),
+          supplier: row[9] || "",
+          note: row[10] || "",
+          updatedAt: new Date().toISOString()
+        }));
+        if (!imported.length) {
+          alert("沒有可匯入的資料。");
+          return;
+        }
+        if (confirm(`匯入 ${imported.length} 筆資料？這會加到現有庫存清單。`)) {
+          items = [...imported, ...items];
+          persist();
+          render();
+        }
+      };
+      reader.readAsText(file, "utf-8");
+      event.target.value = "";
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+        if (char === '"' && quoted && next === '"') {
+          cell += '"';
+          i++;
+        } else if (char === '"') {
+          quoted = !quoted;
+        } else if (char === "," && !quoted) {
+          row.push(cell);
+          cell = "";
+        } else if ((char === "\n" || char === "\r") && !quoted) {
+          if (char === "\r" && next === "\n") i++;
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = "";
+        } else {
+          cell += char;
+        }
+      }
+      if (cell || row.length) {
+        row.push(cell);
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function money(value) {
+      return new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 }).format(value || 0);
+    }
+
+    function numberValue(value) {
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 0 ? number : 0;
+    }
+
+    function normalizeCode(value) {
+      return String(value ?? "").trim().toLowerCase();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>
