@@ -8,6 +8,8 @@ const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5
 const SYNC_URL = "shaochi_cloud_api_url";
 const SYNC_AUTO = "shaochi_cloud_auto_sync";
 const SYNC_LAST = "shaochi_cloud_last_sync";
+const SYNC_REVISION = "shaochi_cloud_revision";
+const SYNC_BACKUP = "shaochi_cloud_recovery_backup";
 const CLOUD_META_KEY = "_shaochiSyncMeta";
 const CLOUD_META_CATALOG_MARKER = "__shaochi_cloud_meta__";
 const INVENTORY_STORAGE_KEY = "motorcycle-shop-inventory-v1";
@@ -338,7 +340,7 @@ function compareOrderDesc(a, b) {
   return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
 }
 
-function repairOrderNumbers() {
+function repairOrderNumbers({ persist = true } = {}) {
   const counters = {};
   let changed = false;
   (db.orders || [])
@@ -354,7 +356,7 @@ function repairOrderNumbers() {
         changed = true;
       }
     });
-  if (changed) localStorage.setItem(KEY, JSON.stringify(db));
+  if (changed && persist) localStorage.setItem(KEY, JSON.stringify(db));
 }
 
 const defaultCatalog = [
@@ -1410,6 +1412,7 @@ function renderSettings() {
           <button id="cloudPingNow" type="button">測試連線</button>
           <button id="cloudUploadNow" type="button">上傳到雲端</button>
           <button id="cloudDownloadNow" type="button" class="secondary">從雲端下載</button>
+          <button id="cloudRestoreBackup" type="button" class="secondary">復原同步前資料</button>
         </div>
         <div id="cloudStatusV108" class="notice"></div>
         <p id="cloudLastSync" class="muted"></p>
@@ -1508,9 +1511,11 @@ function renderCloudSettings() {
   const urlInput = $("#cloudApiUrlV108");
   const autoInput = $("#cloudAutoSync");
   const last = $("#cloudLastSync");
+  const restoreButton = $("#cloudRestoreBackup");
   if (!urlInput || !autoInput || !last) return;
   if (document.activeElement !== urlInput) urlInput.value = getCloudUrl();
   autoInput.checked = localStorage.getItem(SYNC_AUTO) === "1";
+  if (restoreButton) restoreButton.disabled = !localStorage.getItem(SYNC_BACKUP);
   const lastSync = localStorage.getItem(SYNC_LAST);
   last.textContent = lastSync ? `最後同步：${new Date(lastSync).toLocaleString("zh-TW")}` : "尚未同步";
 }
@@ -1668,11 +1673,121 @@ function isAutoSyncOn() {
   return localStorage.getItem(SYNC_AUTO) === "1";
 }
 
-function cloudPayload() {
+function saveCloudRecoveryBackup(reason) {
+  try {
+    localStorage.setItem(SYNC_BACKUP, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      reason,
+      data: db
+    }));
+  } catch {
+    // Keep syncing even when browser storage is full.
+  }
+}
+
+function restoreCloudRecoveryBackup() {
+  const raw = localStorage.getItem(SYNC_BACKUP);
+  if (!raw) return alert("目前沒有可復原的同步前資料");
+  try {
+    const backup = JSON.parse(raw);
+    if (!backup?.data || !confirm(`確定復原 ${new Date(backup.savedAt).toLocaleString("zh-TW")} 的資料？`)) return;
+    applyingCloudData = true;
+    db = normalizeCloudResponse({ data: backup.data });
+    localStorage.setItem(KEY, JSON.stringify(db));
+    localStorage.removeItem(SYNC_REVISION);
+    applyingCloudData = false;
+    render();
+    setCloudStatus("已復原同步前資料，確認內容後再上傳到雲端", "ok");
+  } catch (error) {
+    applyingCloudData = false;
+    alert(`復原失敗：${error.message}`);
+  }
+}
+
+function cloudMeta(payload) {
+  const source = payload?.data || payload || {};
+  const catalog = Array.isArray(source.catalog) ? source.catalog : [];
+  const carrier = catalog.find(item => item && typeof item === "object" && item[CLOUD_META_KEY]);
+  return carrier?.[CLOUD_META_KEY] && typeof carrier[CLOUD_META_KEY] === "object"
+    ? carrier[CLOUD_META_KEY]
+    : {};
+}
+
+function cloudRevision(payload) {
+  return String(cloudMeta(payload).updatedAt || "");
+}
+
+function syncRecordKey(type, item) {
+  if (type === "orders") return String(item?.id || item?.orderNo || "");
+  if (type === "customers") return String(item?.id || normalizePlate(item?.plate) || "");
+  if (type === "appointments") return String(item?.id || "");
+  if (type === "catalog") return `${item?.cat || ""}\u0000${item?.name || ""}`;
+  if (type === "employees") return String(item?.username || item?.id || "");
+  if (type === "roles") return String(item?.id || "");
+  return "";
+}
+
+function mergeSyncRecords(type, remoteItems, localItems) {
+  const merged = new Map();
+  [...(Array.isArray(remoteItems) ? remoteItems : []), ...(Array.isArray(localItems) ? localItems : [])]
+    .forEach((item, index) => {
+      const key = syncRecordKey(type, item) || `__${type}_${index}`;
+      merged.set(key, item);
+    });
+  return [...merged.values()];
+}
+
+function mergeCloudData(remoteData, localData) {
+  const remoteSettings = remoteData.settings || {};
+  const localSettings = localData.settings || {};
+  const settings = { ...remoteSettings, ...localSettings };
+  const remoteInventory = remoteSettings[INVENTORY_CLOUD_KEY];
+  const localInventory = localSettings[INVENTORY_CLOUD_KEY];
+  if (remoteInventory || localInventory) {
+    settings[INVENTORY_CLOUD_KEY] = String(remoteInventory?.updatedAt || "") > String(localInventory?.updatedAt || "")
+      ? remoteInventory
+      : localInventory;
+  }
+  return {
+    orders: mergeSyncRecords("orders", remoteData.orders, localData.orders),
+    customers: mergeSyncRecords("customers", remoteData.customers, localData.customers),
+    appointments: mergeSyncRecords("appointments", remoteData.appointments, localData.appointments),
+    catalog: mergeSyncRecords("catalog", remoteData.catalog, localData.catalog),
+    categories: [...new Set([...(remoteData.categories || []), ...(localData.categories || [])])],
+    employees: mergeSyncRecords("employees", remoteData.employees, localData.employees),
+    roles: mergeSyncRecords("roles", remoteData.roles, localData.roles),
+    settings
+  };
+}
+
+function hasLocalOnlySyncData(remoteData, localData) {
+  return ["orders", "customers", "appointments", "catalog", "employees", "roles"].some(type => {
+    const remoteKeys = new Set((remoteData[type] || []).map(item => syncRecordKey(type, item)));
+    return (localData[type] || []).some(item => {
+      const key = syncRecordKey(type, item);
+      return key && !remoteKeys.has(key);
+    });
+  });
+}
+
+function shouldMergeCloudData(remoteRevision, localRevision, remoteData) {
+  if (remoteRevision !== localRevision && (remoteRevision || localRevision)) return true;
+  return !remoteRevision && !localRevision && hasLocalOnlySyncData(remoteData, db);
+}
+
+async function fetchCloudData(url) {
+  const joiner = url.includes("?") ? "&" : "?";
+  const response = await fetch(`${url}${joiner}action=getAll&t=${Date.now()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+  return payload;
+}
+
+function cloudPayload(revision = new Date().toISOString()) {
   const catalog = (Array.isArray(db.catalog) ? db.catalog : []).map(item => ({ ...item }));
   const meta = {
     schema: 1,
-    updatedAt: new Date().toISOString(),
+    updatedAt: revision,
     appointments: Array.isArray(db.appointments) ? db.appointments : [],
     categories: Array.isArray(db.categories) ? db.categories : [],
     employees: Array.isArray(db.employees) ? db.employees : [],
@@ -1693,7 +1808,7 @@ function cloudPayload() {
   return {
     app: "shaochi-motor",
     version: "v14.1-fixed",
-    updatedAt: new Date().toISOString(),
+    updatedAt: revision,
     data: { ...db, catalog }
   };
 }
@@ -1701,10 +1816,7 @@ function cloudPayload() {
 function normalizeCloudResponse(payload) {
   const source = payload?.data || payload || {};
   const rawCatalog = Array.isArray(source.catalog) ? source.catalog : [];
-  const metaCarrier = rawCatalog.find(item => item && typeof item === "object" && item[CLOUD_META_KEY]);
-  const meta = metaCarrier?.[CLOUD_META_KEY] && typeof metaCarrier[CLOUD_META_KEY] === "object"
-    ? metaCarrier[CLOUD_META_KEY]
-    : {};
+  const meta = cloudMeta(payload);
   const cloudValue = key => {
     if (Object.prototype.hasOwnProperty.call(source, key)) return source[key];
     if (Object.prototype.hasOwnProperty.call(meta, key)) return meta[key];
@@ -1731,7 +1843,7 @@ function normalizeCloudResponse(payload) {
   const previous = db;
   db = normalized;
   ensureAccessData();
-  repairOrderNumbers();
+  repairOrderNumbers({ persist: false });
   const ready = db;
   db = previous;
   return ready;
@@ -1745,7 +1857,20 @@ async function cloudUpload(options = {}) {
   }
   try {
     if (!options.silent) setCloudStatus("正在上傳到雲端...");
-    const uploadData = cloudPayload().data;
+    const remotePayload = await fetchCloudData(url);
+    const remoteData = normalizeCloudResponse(remotePayload);
+    const remoteRevision = cloudRevision(remotePayload);
+    const localRevision = localStorage.getItem(SYNC_REVISION) || "";
+    const merged = shouldMergeCloudData(remoteRevision, localRevision, remoteData);
+    if (merged) {
+      saveCloudRecoveryBackup("上傳前合併");
+      db = mergeCloudData(remoteData, db);
+      ensureAccessData();
+      repairOrderNumbers({ persist: false });
+      localStorage.setItem(KEY, JSON.stringify(db));
+    }
+    const revision = new Date().toISOString();
+    const uploadData = cloudPayload(revision).data;
     const uploadedInventoryAt = uploadData.settings?.[INVENTORY_CLOUD_KEY]?.updatedAt || "";
     const response = await fetch(url, {
       method: "POST",
@@ -1755,9 +1880,11 @@ async function cloudUpload(options = {}) {
     const payload = await response.json();
     if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
+    localStorage.setItem(SYNC_REVISION, revision);
     markInventoryCloudUploaded(uploadedInventoryAt);
+    if (merged && $("#step2")?.classList.contains("hide")) render();
     renderCloudSettings();
-    if (!options.silent) setCloudStatus("已上傳到雲端", "ok");
+    if (!options.silent) setCloudStatus(merged ? "已合併本機與雲端資料並完成上傳" : "已上傳到雲端", "ok");
     return true;
   } catch (error) {
     setCloudStatus(`上傳失敗：${error.message}`, "error");
@@ -1773,18 +1900,23 @@ async function cloudDownload(options = {}) {
   }
   try {
     if (!options.silent) setCloudStatus("正在從雲端下載...");
-    const joiner = url.includes("?") ? "&" : "?";
-    const response = await fetch(`${url}${joiner}action=getAll&t=${Date.now()}`);
-    const payload = await response.json();
-    if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+    const payload = await fetchCloudData(url);
+    const remoteData = normalizeCloudResponse(payload);
+    const remoteRevision = cloudRevision(payload);
+    const localRevision = localStorage.getItem(SYNC_REVISION) || "";
+    const merged = shouldMergeCloudData(remoteRevision, localRevision, remoteData);
+    saveCloudRecoveryBackup("下載前備份");
     applyingCloudData = true;
-    db = normalizeCloudResponse(payload);
+    db = merged ? mergeCloudData(remoteData, db) : remoteData;
+    ensureAccessData();
+    repairOrderNumbers({ persist: false });
     syncLocalInventoryFromSettings();
     localStorage.setItem(KEY, JSON.stringify(db));
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
+    if (remoteRevision) localStorage.setItem(SYNC_REVISION, remoteRevision);
     applyingCloudData = false;
     if ($("#step2")?.classList.contains("hide")) render();
-    if (!options.silent) setCloudStatus("已從雲端下載", "ok");
+    if (!options.silent) setCloudStatus(merged ? "已合併雲端與本機資料，請再按上傳到雲端" : "已從雲端下載", "ok");
     return true;
   } catch (error) {
     applyingCloudData = false;
@@ -2097,6 +2229,7 @@ document.addEventListener("click", event => {
   if (event.target.closest("#cloudPingNow")) cloudPing();
   if (event.target.closest("#cloudUploadNow")) cloudUpload();
   if (event.target.closest("#cloudDownloadNow")) cloudDownload();
+  if (event.target.closest("#cloudRestoreBackup")) restoreCloudRecoveryBackup();
   if (event.target.closest("#saveSystemNameBtn")) {
     const name = $("#systemNameInput").value.trim();
     if (!name) return alert("請輸入系統名稱");
