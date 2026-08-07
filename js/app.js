@@ -8,6 +8,8 @@ const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5
 const SYNC_URL = "shaochi_cloud_api_url";
 const SYNC_AUTO = "shaochi_cloud_auto_sync";
 const SYNC_LAST = "shaochi_cloud_last_sync";
+const CLOUD_META_KEY = "_shaochiSyncMeta";
+const CLOUD_META_CATALOG_MARKER = "__shaochi_cloud_meta__";
 const STATUSES = ["待檢查", "等待料件", "維修中", "待取車", "已完成", "已交車"];
 const PERMISSIONS = [
   ["receive", "維修主畫面"],
@@ -1463,25 +1465,64 @@ function isAutoSyncOn() {
 }
 
 function cloudPayload() {
+  const catalog = (Array.isArray(db.catalog) ? db.catalog : []).map(item => ({ ...item }));
+  const meta = {
+    schema: 1,
+    updatedAt: new Date().toISOString(),
+    appointments: Array.isArray(db.appointments) ? db.appointments : [],
+    categories: Array.isArray(db.categories) ? db.categories : [],
+    employees: Array.isArray(db.employees) ? db.employees : [],
+    roles: Array.isArray(db.roles) ? db.roles : [],
+    settings: db.settings && typeof db.settings === "object" ? db.settings : {}
+  };
+  if (catalog.length) {
+    catalog[0] = { ...catalog[0], [CLOUD_META_KEY]: meta };
+  } else {
+    catalog.push({
+      cat: CLOUD_META_CATALOG_MARKER,
+      name: CLOUD_META_CATALOG_MARKER,
+      price: 0,
+      cost: 0,
+      [CLOUD_META_KEY]: meta
+    });
+  }
   return {
     app: "shaochi-motor",
     version: "v14.1-fixed",
     updatedAt: new Date().toISOString(),
-    data: db
+    data: { ...db, catalog }
   };
 }
 
 function normalizeCloudResponse(payload) {
-  const source = payload?.data || payload;
+  const source = payload?.data || payload || {};
+  const rawCatalog = Array.isArray(source.catalog) ? source.catalog : [];
+  const metaCarrier = rawCatalog.find(item => item && typeof item === "object" && item[CLOUD_META_KEY]);
+  const meta = metaCarrier?.[CLOUD_META_KEY] && typeof metaCarrier[CLOUD_META_KEY] === "object"
+    ? metaCarrier[CLOUD_META_KEY]
+    : {};
+  const cloudValue = key => {
+    if (Object.prototype.hasOwnProperty.call(source, key)) return source[key];
+    if (Object.prototype.hasOwnProperty.call(meta, key)) return meta[key];
+    return db?.[key];
+  };
+  const catalog = rawCatalog.filter(item => !(
+    item?.cat === CLOUD_META_CATALOG_MARKER && item?.name === CLOUD_META_CATALOG_MARKER
+  ));
+  const appointments = cloudValue("appointments");
+  const categories = cloudValue("categories");
+  const employees = cloudValue("employees");
+  const roles = cloudValue("roles");
+  const settings = cloudValue("settings");
   const normalized = {
     orders: Array.isArray(source?.orders) ? source.orders.map(normalizeOrder) : [],
     customers: Array.isArray(source?.customers) ? source.customers.map(normalizeCustomer) : [],
-    appointments: Array.isArray(source?.appointments) ? source.appointments.map(normalizeAppointment) : [],
-    catalog: Array.isArray(source?.catalog) ? source.catalog : defaultCatalog.slice(),
-    categories: [...new Set([...(Array.isArray(source?.categories) ? source.categories : []), ...(Array.isArray(source?.catalog) ? source.catalog.map(item => item.cat) : [])].filter(Boolean))],
-    employees: Array.isArray(source?.employees) ? source.employees : [],
-    roles: Array.isArray(source?.roles) ? source.roles : [],
-    settings: source?.settings && typeof source.settings === "object" ? source.settings : {}
+    appointments: Array.isArray(appointments) ? appointments.map(normalizeAppointment) : [],
+    catalog: catalog.length ? catalog : defaultCatalog.slice(),
+    categories: [...new Set([...(Array.isArray(categories) ? categories : []), ...catalog.map(item => item.cat)].filter(Boolean))],
+    employees: Array.isArray(employees) ? employees : [],
+    roles: Array.isArray(roles) ? roles : [],
+    settings: settings && typeof settings === "object" ? settings : {}
   };
   const previous = db;
   db = normalized;
