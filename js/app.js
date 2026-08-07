@@ -10,6 +10,10 @@ const SYNC_AUTO = "shaochi_cloud_auto_sync";
 const SYNC_LAST = "shaochi_cloud_last_sync";
 const CLOUD_META_KEY = "_shaochiSyncMeta";
 const CLOUD_META_CATALOG_MARKER = "__shaochi_cloud_meta__";
+const INVENTORY_STORAGE_KEY = "motorcycle-shop-inventory-v1";
+const INVENTORY_LOG_KEY = "motorcycle-shop-inventory-logs-v1";
+const INVENTORY_SYNC_KEY = "qidian-inventory-cloud-sync-v1";
+const INVENTORY_CLOUD_KEY = "_qidianInventorySync";
 const STATUSES = ["待檢查", "等待料件", "維修中", "待取車", "已完成", "已交車"];
 const PERMISSIONS = [
   ["receive", "維修主畫面"],
@@ -38,6 +42,7 @@ let editingCustomerId = null;
 let editingEmployeeId = null;
 let syncTimer = null;
 let applyingCloudData = false;
+let inventoryCloudWritePending = false;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -64,6 +69,200 @@ const dateInputValue = value => {
   if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
   return todayText();
 };
+
+function readStoredJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
+}
+
+function normalizeInventoryCode(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseOrderInventoryUsage(value) {
+  const combined = new Map();
+  String(value || "").split("\n").forEach(line => {
+    const match = line.trim().match(/^(.*?)\s+x(\d+)\s+\$([\d,]+)$/);
+    if (!match) return;
+    const name = match[1].trim();
+    const key = normalizeInventoryCode(name);
+    if (!key) return;
+    const current = combined.get(key) || { name, qty: 0 };
+    current.qty += Math.max(1, Number(match[2] || 1));
+    combined.set(key, current);
+  });
+  return [...combined.values()];
+}
+
+function findInventoryStateItem(items, part) {
+  const name = normalizeInventoryCode(part.name);
+  if (!name) return null;
+  return items.find(item => {
+    const itemName = normalizeInventoryCode(item.name);
+    const sku = normalizeInventoryCode(item.sku);
+    return itemName === name || (sku && sku === name);
+  }) || items.find(item => {
+    const itemName = normalizeInventoryCode(item.name);
+    return itemName && (itemName.includes(name) || name.includes(itemName));
+  }) || items.find(item => {
+    const sku = normalizeInventoryCode(item.sku);
+    return sku && (sku.includes(name) || name.includes(sku));
+  }) || null;
+}
+
+function repairInventoryLogKey(order, part) {
+  return `${String(order.id || "")}::${normalizeInventoryCode(part.name)}`;
+}
+
+function deductOrderFromInventoryState(order, inventoryState, now = new Date().toISOString()) {
+  const state = {
+    ...inventoryState,
+    schema: 1,
+    items: Array.isArray(inventoryState?.items) ? inventoryState.items.map(item => ({ ...item })) : [],
+    logs: Array.isArray(inventoryState?.logs) ? inventoryState.logs.map(log => ({ ...log })) : [],
+    deletedItems: Array.isArray(inventoryState?.deletedItems) ? inventoryState.deletedItems.map(entry => ({ ...entry })) : [],
+    deletedLogs: Array.isArray(inventoryState?.deletedLogs) ? inventoryState.deletedLogs.map(entry => ({ ...entry })) : []
+  };
+  const result = { changed: false, deducted: [], missing: [], insufficient: [], state };
+  if (String(order?.type || "").includes("估價")) return result;
+
+  parseOrderInventoryUsage(order?.items).forEach(part => {
+    const repairKey = repairInventoryLogKey(order, part);
+    const deductedQty = state.logs
+      .filter(log => log.source === "repair" && log.repairKey === repairKey && log.type === "out")
+      .reduce((sum, log) => sum + Number(log.qty || 0), 0);
+    const remainingQty = Math.max(0, part.qty - deductedQty);
+    if (!remainingQty) return;
+
+    const item = findInventoryStateItem(state.items, part);
+    if (!item) {
+      result.missing.push(part.name);
+      return;
+    }
+    if (Number(item.stock || 0) < remainingQty) {
+      result.insufficient.push({ name: part.name, needed: remainingQty, stock: Number(item.stock || 0) });
+      return;
+    }
+
+    item.stock = Number(item.stock || 0) - remainingQty;
+    item.updatedAt = now;
+    state.logs.push({
+      id: uid(),
+      itemId: item.id,
+      itemName: item.name,
+      type: "out",
+      qty: remainingQty,
+      date: dateInputValue(order.date || now),
+      paymentMethod: "repair",
+      note: `維修工單 ${order.plate || ""} 自動扣庫存：${part.name}`,
+      createdAt: now,
+      source: "repair",
+      repairKey,
+      repairOrderId: String(order.id || ""),
+      repairPlate: order.plate || "",
+      repairPartName: part.name
+    });
+    result.changed = true;
+    result.deducted.push({ name: part.name, qty: remainingQty });
+  });
+
+  if (result.changed) state.updatedAt = now;
+  return result;
+}
+
+function currentInventoryState() {
+  const cloudState = db.settings?.[INVENTORY_CLOUD_KEY];
+  const cloudValid = cloudState && Array.isArray(cloudState.items) && Array.isArray(cloudState.logs);
+  const hasLocalState = localStorage.getItem(INVENTORY_STORAGE_KEY) !== null;
+  const localMeta = readStoredJson(INVENTORY_SYNC_KEY, {});
+  const localState = hasLocalState ? {
+    schema: 1,
+    updatedAt: localMeta.updatedAt || "",
+    items: readStoredJson(INVENTORY_STORAGE_KEY, []),
+    logs: readStoredJson(INVENTORY_LOG_KEY, []),
+    deletedItems: Array.isArray(localMeta.deletedItems) ? localMeta.deletedItems : [],
+    deletedLogs: Array.isArray(localMeta.deletedLogs) ? localMeta.deletedLogs : []
+  } : null;
+  if (!cloudValid) return localState;
+  if (!localState) return cloudState;
+  return String(localState.updatedAt || "") > String(cloudState.updatedAt || "") ? localState : cloudState;
+}
+
+function saveInventoryStateFromOrder(result) {
+  if (!result?.changed) return;
+  if (!db.settings || typeof db.settings !== "object") db.settings = {};
+  db.settings[INVENTORY_CLOUD_KEY] = result.state;
+  localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(result.state.items));
+  localStorage.setItem(INVENTORY_LOG_KEY, JSON.stringify(result.state.logs));
+  const previousMeta = readStoredJson(INVENTORY_SYNC_KEY, {});
+  localStorage.setItem(INVENTORY_SYNC_KEY, JSON.stringify({
+    ...previousMeta,
+    updatedAt: result.state.updatedAt,
+    dirty: true,
+    deletedItems: result.state.deletedItems,
+    deletedLogs: result.state.deletedLogs
+  }));
+  inventoryCloudWritePending = true;
+}
+
+function autoDeductOrderInventory(order) {
+  const inventoryState = currentInventoryState();
+  if (!inventoryState) return { changed: false, deducted: [], missing: ["尚未建立庫存資料"], insufficient: [] };
+  const result = deductOrderFromInventoryState(order, inventoryState);
+  saveInventoryStateFromOrder(result);
+  return result;
+}
+
+function showOrderInventoryNotice(order, result) {
+  const notice = $(order.type === "估價單" ? "#quoteSuccessMsg" : "#createSuccessMsg");
+  if (!notice) return;
+  let message = order.type === "估價單" ? "估價單已建立，未扣庫存" : "工單已建立，沒有需要扣除的新數量";
+  let color = "#16a34a";
+  if (result?.deducted?.length) {
+    message = `工單已建立，庫存已自動扣除：${result.deducted.map(item => `${item.name} x${item.qty}`).join("、")}`;
+  }
+  if (result?.missing?.length || result?.insufficient?.length) {
+    const issues = [
+      result.missing?.length ? `找不到：${result.missing.join("、")}` : "",
+      result.insufficient?.length ? `庫存不足：${result.insufficient.map(item => `${item.name}（需要 ${item.needed}，目前 ${item.stock}）`).join("、")}` : ""
+    ].filter(Boolean).join("；");
+    message = `工單已建立；${issues}`;
+    color = "#d97706";
+  }
+  notice.textContent = message;
+  notice.style.color = color;
+  notice.classList.remove("hide");
+  setTimeout(() => notice.classList.add("hide"), 7000);
+}
+
+function syncLocalInventoryFromSettings() {
+  const cloudState = db.settings?.[INVENTORY_CLOUD_KEY];
+  if (!cloudState || !Array.isArray(cloudState.items) || !Array.isArray(cloudState.logs)) return;
+  const localMeta = readStoredJson(INVENTORY_SYNC_KEY, {});
+  if (localMeta.dirty && String(localMeta.updatedAt || "") > String(cloudState.updatedAt || "")) return;
+  localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(cloudState.items));
+  localStorage.setItem(INVENTORY_LOG_KEY, JSON.stringify(cloudState.logs));
+  localStorage.setItem(INVENTORY_SYNC_KEY, JSON.stringify({
+    ...localMeta,
+    updatedAt: cloudState.updatedAt || new Date().toISOString(),
+    lastSyncedAt: new Date().toISOString(),
+    dirty: false,
+    deletedItems: Array.isArray(cloudState.deletedItems) ? cloudState.deletedItems : [],
+    deletedLogs: Array.isArray(cloudState.deletedLogs) ? cloudState.deletedLogs : []
+  }));
+}
+
+function markInventoryCloudUploaded(uploadedAt) {
+  const currentUpdatedAt = db.settings?.[INVENTORY_CLOUD_KEY]?.updatedAt || "";
+  inventoryCloudWritePending = String(currentUpdatedAt) > String(uploadedAt || "");
+  if (inventoryCloudWritePending || !uploadedAt) return;
+  const localMeta = readStoredJson(INVENTORY_SYNC_KEY, {});
+  localStorage.setItem(INVENTORY_SYNC_KEY, JSON.stringify({
+    ...localMeta,
+    updatedAt: uploadedAt,
+    lastSyncedAt: new Date().toISOString(),
+    dirty: false
+  }));
+}
 const normalizePlate = value => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const formatPlate = value => {
   const raw = normalizePlate(value);
@@ -226,6 +425,7 @@ function load() {
   db.customers = db.customers.map(normalizeCustomer);
   db.appointments = db.appointments.map(normalizeAppointment);
   ensureAccessData();
+  syncLocalInventoryFromSettings();
   localStorage.setItem(KEY, JSON.stringify(db));
 }
 
@@ -691,10 +891,12 @@ function createOrder(type = "工單") {
     customer.km = order.km;
     customer.updatedAt = new Date().toISOString();
   }
+  const inventoryResult = order.type === "估價單" ? null : autoDeductOrderInventory(order);
   editingOrderId = null;
   save();
   resetReceive();
   openPage(order.type === "估價單" ? "quotes" : "orders");
+  showOrderInventoryNotice(order, inventoryResult);
 }
 
 function badgeClass(order) {
@@ -1411,9 +1613,11 @@ function saveEditOrder() {
   order.amount = Number($("#editLaborCost").value || 0);
   order.paid = Number($("#editPaidAmount").value || 0);
   order.updatedAt = new Date().toISOString();
+  const inventoryResult = autoDeductOrderInventory(order);
   $("#editOrderModal").classList.add("hide");
   editingOrderId = null;
   save();
+  showOrderInventoryNotice(order, inventoryResult);
 }
 
 function exportData() {
@@ -1541,14 +1745,17 @@ async function cloudUpload(options = {}) {
   }
   try {
     if (!options.silent) setCloudStatus("正在上傳到雲端...");
+    const uploadData = cloudPayload().data;
+    const uploadedInventoryAt = uploadData.settings?.[INVENTORY_CLOUD_KEY]?.updatedAt || "";
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "saveAll", data: cloudPayload().data })
+      body: JSON.stringify({ action: "saveAll", data: uploadData })
     });
     const payload = await response.json();
     if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
+    markInventoryCloudUploaded(uploadedInventoryAt);
     renderCloudSettings();
     if (!options.silent) setCloudStatus("已上傳到雲端", "ok");
     return true;
@@ -1572,6 +1779,7 @@ async function cloudDownload(options = {}) {
     if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
     applyingCloudData = true;
     db = normalizeCloudResponse(payload);
+    syncLocalInventoryFromSettings();
     localStorage.setItem(KEY, JSON.stringify(db));
     localStorage.setItem(SYNC_LAST, new Date().toISOString());
     applyingCloudData = false;
@@ -1602,7 +1810,7 @@ async function cloudPing() {
 }
 
 function queueCloudUpload() {
-  if (applyingCloudData || !isAutoSyncOn() || !getCloudUrl()) return;
+  if (applyingCloudData || (!isAutoSyncOn() && !inventoryCloudWritePending) || !getCloudUrl()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => cloudUpload({ silent: true }), 1200);
 }
@@ -1755,8 +1963,10 @@ document.addEventListener("click", event => {
       order.type = "工單";
       order.orderNo = nextOrderNo("工單", order.date, order.id);
       order.workStatus = "待檢查";
+      const inventoryResult = autoDeductOrderInventory(order);
       save();
       openPage("orders");
+      showOrderInventoryNotice(order, inventoryResult);
     }
   }
   const printButton = event.target.closest(".printOrder");
