@@ -173,6 +173,53 @@
       flex-wrap: wrap;
     }
 
+    .cloud-sync {
+      min-height: 39px;
+      padding: 5px 6px 5px 10px;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      background: #111827;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .cloud-sync-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .cloud-sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f59e0b;
+      flex: 0 0 auto;
+    }
+
+    .cloud-sync[data-state="ok"] .cloud-sync-dot { background: #22c55e; }
+    .cloud-sync[data-state="error"] .cloud-sync-dot { background: #ef4444; }
+    .cloud-sync[data-state="working"] .cloud-sync-dot { animation: sync-pulse 1s ease-in-out infinite; }
+
+    .cloud-sync .btn {
+      min-height: 29px;
+      padding: 4px 8px;
+      border-color: #64748b;
+      background: #1f2937;
+      color: #f8fafc;
+      font-size: 12px;
+    }
+
+    .cloud-sync .btn:disabled { cursor: wait; opacity: .65; }
+
+    @keyframes sync-pulse {
+      50% { opacity: .35; }
+    }
+
     .btn {
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -620,6 +667,8 @@
       .sync-summary { grid-template-columns: 1fr; }
       .actions { width: 100%; }
       .actions .btn { flex: 1 1 auto; }
+      .cloud-sync { width: 100%; justify-content: space-between; }
+      .cloud-sync .btn { flex: 0 0 auto; }
     }
   </style>
 </head>
@@ -641,7 +690,7 @@
       </nav>
       <div class="sidebar-note">
         <a class="side-link" href="index.html">返回維修系統</a>
-        資料會保存在這台電腦的瀏覽器中。換瀏覽器或清除網站資料前，請先匯出 CSV 備份。
+        庫存會同步到 Google 雲端，並在這台裝置保留離線資料。重要異動後仍可匯出 CSV 備份。
       </div>
     </aside>
 
@@ -652,6 +701,10 @@
           <h2 id="viewTitle">庫存總覽</h2>
         </div>
         <div class="actions">
+          <div class="cloud-sync" id="cloudSync" data-state="working" role="status" aria-live="polite">
+            <span class="cloud-sync-label"><span class="cloud-sync-dot"></span><span id="cloudSyncText">Google 雲端連線中</span></span>
+            <button class="btn" id="syncNowBtn" type="button">立即同步</button>
+          </div>
           <button class="btn" id="importBtn">匯入 CSV</button>
           <button class="btn" id="exportBtn">匯出 CSV</button>
           <button class="btn primary" id="newItemBtn">新增品項</button>
@@ -942,6 +995,12 @@
     const STORAGE_KEY = "motorcycle-shop-inventory-v1";
     const LOG_KEY = "motorcycle-shop-inventory-logs-v1";
     const REPAIR_KEY = "shaochi_v14_data";
+    const LOCAL_SYNC_KEY = "qidian-inventory-cloud-sync-v1";
+    const CLOUD_INVENTORY_KEY = "_qidianInventorySync";
+    const CLOUD_REPAIR_META_KEY = "_shaochiSyncMeta";
+    const CLOUD_CATALOG_MARKER = "__shaochi_cloud_meta__";
+    const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbw5xe6EfThaRG5R1WuM9tJN1wt3rnWczF0MOerC3RqmPtSdpg2BqsxAFU8MHZMG3-xw/exec";
+    const hadLocalInventory = localStorage.getItem(STORAGE_KEY) !== null;
 
     const defaultItems = [
       { id: crypto.randomUUID(), name: "10W-40 機油 1L", sku: "OIL-1040", category: "機油耗材", brand: "YAMAHA", location: "A1", stock: 18, min: 8, cost: 150, price: 250, supplier: "宏達材料", note: "常用保養品", updatedAt: new Date().toISOString() },
@@ -952,12 +1011,15 @@
 
     let items = loadItems();
     let logs = loadLogs();
+    let localSyncMeta = loadLocalSyncMeta();
     let currentMoveType = "in";
     let currentScanType = "in";
     let cameraStream = null;
     let cameraDetector = null;
     let cameraLoopActive = false;
     let lastCameraCode = "";
+    let cloudSyncTimer = null;
+    let cloudSyncInFlight = false;
 
     const els = {
       viewTitle: document.querySelector("#viewTitle"),
@@ -1001,6 +1063,9 @@
       exportBtn: document.querySelector("#exportBtn"),
       importBtn: document.querySelector("#importBtn"),
       importFile: document.querySelector("#importFile"),
+      cloudSync: document.querySelector("#cloudSync"),
+      cloudSyncText: document.querySelector("#cloudSyncText"),
+      syncNowBtn: document.querySelector("#syncNowBtn"),
       scanForm: document.querySelector("#scanForm"),
       scanCode: document.querySelector("#scanCode"),
       scanQty: document.querySelector("#scanQty"),
@@ -1036,6 +1101,10 @@
       els.moveDate.valueAsDate = new Date();
       bindEvents();
       render();
+      syncInventory();
+      window.setInterval(() => {
+        if (!document.hidden) syncInventory();
+      }, 45000);
     }
 
     function bindEvents() {
@@ -1051,6 +1120,7 @@
       els.exportBtn.addEventListener("click", exportCsv);
       els.importBtn.addEventListener("click", () => els.importFile.click());
       els.importFile.addEventListener("change", importCsv);
+      els.syncNowBtn.addEventListener("click", () => syncInventory({ force: true }));
       els.scanTabs.forEach(tab => tab.addEventListener("click", () => setScanType(tab.dataset.scanType)));
       els.scanForm.addEventListener("submit", saveScannedMovement);
       els.startCameraBtn.addEventListener("click", startCameraScan);
@@ -1059,6 +1129,9 @@
       els.moveForm.addEventListener("submit", saveMovement);
       els.clearLogsBtn.addEventListener("click", clearLogs);
       els.refreshRepairBtn.addEventListener("click", renderRepairLink);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) queueCloudSync(250);
+      });
     }
 
     function loadItems() {
@@ -1076,9 +1149,267 @@
       try { return JSON.parse(saved); } catch { return []; }
     }
 
-    function persist() {
+    function persist(options = {}) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+      if (options.fromCloud) return;
+      localSyncMeta = {
+        ...localSyncMeta,
+        updatedAt: new Date().toISOString(),
+        dirty: true
+      };
+      saveLocalSyncMeta();
+      setCloudSyncStatus("有新異動，等待同步", "idle");
+      queueCloudSync();
+    }
+
+    function loadLocalSyncMeta() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(LOCAL_SYNC_KEY) || "null"); } catch {}
+      const newestLocalTime = [...items, ...logs].reduce((latest, entry) => {
+        const value = entry.updatedAt || entry.createdAt || "";
+        return value > latest ? value : latest;
+      }, "");
+      return {
+        updatedAt: saved?.updatedAt || newestLocalTime || "",
+        lastSyncedAt: saved?.lastSyncedAt || "",
+        dirty: typeof saved?.dirty === "boolean" ? saved.dirty : hadLocalInventory,
+        deletedItems: normalizeTombstones(saved?.deletedItems),
+        deletedLogs: normalizeTombstones(saved?.deletedLogs)
+      };
+    }
+
+    function normalizeTombstones(value) {
+      if (!Array.isArray(value)) return [];
+      return value
+        .filter(entry => entry && entry.id)
+        .map(entry => ({ id: String(entry.id), deletedAt: entry.deletedAt || new Date(0).toISOString() }));
+    }
+
+    function saveLocalSyncMeta() {
+      localStorage.setItem(LOCAL_SYNC_KEY, JSON.stringify(localSyncMeta));
+    }
+
+    function setCloudSyncStatus(message, state = "idle") {
+      els.cloudSync.dataset.state = state;
+      els.cloudSyncText.textContent = message;
+      els.syncNowBtn.disabled = state === "working";
+    }
+
+    function queueCloudSync(delay = 1000) {
+      clearTimeout(cloudSyncTimer);
+      cloudSyncTimer = setTimeout(() => syncInventory(), delay);
+    }
+
+    async function fetchCloudData() {
+      const joiner = CLOUD_API_URL.includes("?") ? "&" : "?";
+      const response = await fetch(`${CLOUD_API_URL}${joiner}action=getAll&t=${Date.now()}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      }
+      return payload?.data && typeof payload.data === "object" ? payload.data : payload;
+    }
+
+    function extractCloudInventory(cloudData) {
+      const catalog = Array.isArray(cloudData?.catalog) ? cloudData.catalog : [];
+      const carrier = catalog.find(entry => entry && typeof entry === "object" && (
+        entry[CLOUD_REPAIR_META_KEY]?.settings?.[CLOUD_INVENTORY_KEY] || entry[CLOUD_INVENTORY_KEY]
+      ));
+      const cloudInventory = carrier?.[CLOUD_REPAIR_META_KEY]?.settings?.[CLOUD_INVENTORY_KEY]
+        || carrier?.[CLOUD_INVENTORY_KEY];
+      if (!cloudInventory || !Array.isArray(cloudInventory.items) || !Array.isArray(cloudInventory.logs)) return null;
+      return {
+        schema: 1,
+        updatedAt: cloudInventory.updatedAt || "",
+        items: cloudInventory.items,
+        logs: cloudInventory.logs,
+        deletedItems: normalizeTombstones(cloudInventory.deletedItems),
+        deletedLogs: normalizeTombstones(cloudInventory.deletedLogs)
+      };
+    }
+
+    function mergeTombstones(first, second) {
+      const merged = new Map();
+      [...normalizeTombstones(first), ...normalizeTombstones(second)].forEach(entry => {
+        const current = merged.get(entry.id);
+        if (!current || entry.deletedAt > current.deletedAt) merged.set(entry.id, entry);
+      });
+      return [...merged.values()];
+    }
+
+    function mergeEntities(first, second, timeKey) {
+      const merged = new Map();
+      [...first, ...second].forEach(entry => {
+        if (!entry?.id) return;
+        const current = merged.get(entry.id);
+        const entryTime = entry[timeKey] || "";
+        const currentTime = current?.[timeKey] || "";
+        if (!current || entryTime >= currentTime) merged.set(entry.id, { ...entry });
+      });
+      return [...merged.values()];
+    }
+
+    function mergeInventoryState(cloudInventory) {
+      const deletedItems = mergeTombstones(cloudInventory.deletedItems, localSyncMeta.deletedItems);
+      const deletedLogs = mergeTombstones(cloudInventory.deletedLogs, localSyncMeta.deletedLogs);
+      const deletedItemIds = new Set(deletedItems.map(entry => entry.id));
+      const deletedLogIds = new Set(deletedLogs.map(entry => entry.id));
+      const mergedItems = mergeEntities(cloudInventory.items, items, "updatedAt")
+        .filter(entry => !deletedItemIds.has(String(entry.id)))
+        .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+      const mergedLogs = mergeEntities(cloudInventory.logs, logs, "createdAt")
+        .filter(entry => !deletedLogIds.has(String(entry.id)))
+        .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      return {
+        schema: 1,
+        updatedAt: new Date().toISOString(),
+        items: mergedItems,
+        logs: mergedLogs,
+        deletedItems,
+        deletedLogs
+      };
+    }
+
+    function currentInventoryPayload() {
+      return {
+        schema: 1,
+        updatedAt: localSyncMeta.updatedAt || new Date().toISOString(),
+        items,
+        logs,
+        deletedItems: normalizeTombstones(localSyncMeta.deletedItems),
+        deletedLogs: normalizeTombstones(localSyncMeta.deletedLogs)
+      };
+    }
+
+    function applyCloudInventory(cloudInventory) {
+      items = cloudInventory.items.map(entry => ({ ...entry }));
+      logs = cloudInventory.logs.map(entry => ({ ...entry }));
+      localSyncMeta = {
+        updatedAt: cloudInventory.updatedAt || new Date().toISOString(),
+        lastSyncedAt: new Date().toISOString(),
+        dirty: false,
+        deletedItems: normalizeTombstones(cloudInventory.deletedItems),
+        deletedLogs: normalizeTombstones(cloudInventory.deletedLogs)
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+      saveLocalSyncMeta();
+      render();
+    }
+
+    function buildCloudSaveData(cloudData, inventoryPayload) {
+      const catalog = Array.isArray(cloudData?.catalog)
+        ? cloudData.catalog.map(entry => entry && typeof entry === "object" ? { ...entry } : entry)
+        : [];
+      let carrierIndex = catalog.findIndex(entry => entry && typeof entry === "object" && entry[CLOUD_REPAIR_META_KEY]);
+      if (carrierIndex < 0) carrierIndex = catalog.findIndex(entry => entry && typeof entry === "object");
+      if (carrierIndex < 0) {
+        catalog.push({ cat: CLOUD_CATALOG_MARKER, name: CLOUD_CATALOG_MARKER, price: 0, cost: 0 });
+        carrierIndex = 0;
+      }
+      const repairMeta = catalog[carrierIndex][CLOUD_REPAIR_META_KEY] && typeof catalog[carrierIndex][CLOUD_REPAIR_META_KEY] === "object"
+        ? catalog[carrierIndex][CLOUD_REPAIR_META_KEY]
+        : {};
+      catalog[carrierIndex] = {
+        ...catalog[carrierIndex],
+        [CLOUD_REPAIR_META_KEY]: {
+          ...repairMeta,
+          settings: {
+            ...(repairMeta.settings && typeof repairMeta.settings === "object" ? repairMeta.settings : {}),
+            [CLOUD_INVENTORY_KEY]: inventoryPayload
+          }
+        }
+      };
+      return { ...cloudData, catalog };
+    }
+
+    async function uploadCloudInventory(cloudData, inventoryPayload) {
+      const cloudSaveData = buildCloudSaveData(cloudData, inventoryPayload);
+      const response = await fetch(CLOUD_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "saveAll", data: cloudSaveData })
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      }
+
+      const changedDuringUpload = String(localSyncMeta.updatedAt || "") > String(inventoryPayload.updatedAt || "");
+      localSyncMeta = {
+        ...localSyncMeta,
+        updatedAt: changedDuringUpload ? localSyncMeta.updatedAt : inventoryPayload.updatedAt,
+        lastSyncedAt: new Date().toISOString(),
+        dirty: changedDuringUpload,
+        deletedItems: changedDuringUpload ? localSyncMeta.deletedItems : inventoryPayload.deletedItems,
+        deletedLogs: changedDuringUpload ? localSyncMeta.deletedLogs : inventoryPayload.deletedLogs
+      };
+      saveLocalSyncMeta();
+      if (changedDuringUpload) {
+        setCloudSyncStatus("已同步，仍有新異動", "idle");
+        queueCloudSync();
+      } else {
+        const time = new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+        setCloudSyncStatus(`Google 雲端已同步 ${time}`, "ok");
+      }
+    }
+
+    async function syncInventory(options = {}) {
+      if (cloudSyncInFlight) return false;
+      cloudSyncInFlight = true;
+      setCloudSyncStatus("Google 雲端同步中", "working");
+      try {
+        const cloudData = await fetchCloudData();
+        const cloudInventory = extractCloudInventory(cloudData);
+        if (!cloudInventory) {
+          if (!options.force && !localSyncMeta.dirty && !hadLocalInventory) {
+            setCloudSyncStatus("雲端尚無庫存資料", "idle");
+            return true;
+          }
+          const initialPayload = currentInventoryPayload();
+          if (!initialPayload.updatedAt) initialPayload.updatedAt = new Date().toISOString();
+          await uploadCloudInventory(cloudData, initialPayload);
+          return true;
+        }
+
+        if (localSyncMeta.dirty) {
+          const mergedInventory = mergeInventoryState(cloudInventory);
+          items = mergedInventory.items;
+          logs = mergedInventory.logs;
+          localSyncMeta = {
+            ...localSyncMeta,
+            updatedAt: mergedInventory.updatedAt,
+            deletedItems: mergedInventory.deletedItems,
+            deletedLogs: mergedInventory.deletedLogs,
+            dirty: true
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+          localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+          saveLocalSyncMeta();
+          render();
+          await uploadCloudInventory(cloudData, mergedInventory);
+          return true;
+        }
+
+        applyCloudInventory(cloudInventory);
+        const time = new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+        setCloudSyncStatus(`Google 雲端已同步 ${time}`, "ok");
+        return true;
+      } catch (error) {
+        setCloudSyncStatus(`同步失敗：${error.message}`, "error");
+        return false;
+      } finally {
+        cloudSyncInFlight = false;
+        els.syncNowBtn.disabled = false;
+      }
+    }
+
+    function recordCloudDeletion(type, ids) {
+      const key = type === "item" ? "deletedItems" : "deletedLogs";
+      const deletedAt = new Date().toISOString();
+      const tombstones = mergeTombstones(localSyncMeta[key], ids.map(id => ({ id, deletedAt })));
+      localSyncMeta = { ...localSyncMeta, [key]: tombstones };
     }
 
     function render() {
@@ -1397,6 +1728,9 @@
     window.deleteItem = function(id) {
       const item = items.find(current => current.id === id);
       if (!item || !confirm(`確定刪除「${item.name}」？`)) return;
+      const removedLogIds = logs.filter(log => log.itemId === id).map(log => log.id);
+      recordCloudDeletion("item", [id]);
+      if (removedLogIds.length) recordCloudDeletion("log", removedLogIds);
       items = items.filter(current => current.id !== id);
       logs = logs.filter(log => log.itemId !== id);
       persist();
@@ -1497,6 +1831,7 @@
         item.updatedAt = new Date().toISOString();
       }
 
+      recordCloudDeletion("log", [id]);
       logs = logs.filter(current => current.id !== id);
       persist();
       render();
@@ -1578,6 +1913,7 @@
 
     function clearLogs() {
       if (!logs.length || !confirm("確定清除所有進出貨紀錄？庫存數量不會回復。")) return;
+      recordCloudDeletion("log", logs.map(log => log.id));
       logs = [];
       persist();
       render();
