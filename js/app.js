@@ -45,6 +45,8 @@ let editingEmployeeId = null;
 let syncTimer = null;
 let applyingCloudData = false;
 let inventoryCloudWritePending = false;
+let draggingCatalogIndex = null;
+let catalogPointerDrag = null;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -372,12 +374,15 @@ const defaultCatalog = [
   { cat: "電系", name: "電瓶", price: 1200 }
 ];
 
-function normalizeCatalogItem(item) {
+function normalizeCatalogItem(item, index = 0) {
+  const rawSortOrder = Number(item?.sortOrder);
   return {
     cat: String(item?.cat || ""),
     name: String(item?.name || ""),
     price: Math.max(0, Number(item?.price || 0)),
-    cost: Math.max(0, Number(item?.cost || 0))
+    cost: Math.max(0, Number(item?.cost || 0)),
+    sortOrder: Number.isFinite(rawSortOrder) ? rawSortOrder : index,
+    updatedAt: String(item?.updatedAt || "")
   };
 }
 
@@ -620,6 +625,44 @@ function getPartCats() {
   return [...new Set([...(db.categories || []), ...db.catalog.map(item => item.cat)].filter(Boolean))];
 }
 
+function orderedCatalogEntries(cat) {
+  return db.catalog
+    .map((item, index) => ({ item, index }))
+    .filter(entry => entry.item.cat === cat)
+    .sort((a, b) => Number(a.item.sortOrder || 0) - Number(b.item.sortOrder || 0) || a.index - b.index);
+}
+
+function resequenceCatalogCategory(cat, orderedItems) {
+  const updatedAt = new Date().toISOString();
+  orderedItems.forEach((item, index) => {
+    item.sortOrder = index;
+    item.updatedAt = updatedAt;
+  });
+}
+
+function moveCatalogItem(fromIndex, toIndex) {
+  const movingItem = db.catalog[fromIndex];
+  const targetItem = db.catalog[toIndex];
+  if (!movingItem || !targetItem || movingItem.cat !== targetItem.cat || fromIndex === toIndex) return false;
+  const orderedItems = orderedCatalogEntries(movingItem.cat).map(entry => entry.item);
+  const fromPosition = orderedItems.indexOf(movingItem);
+  const toPosition = orderedItems.indexOf(targetItem);
+  if (fromPosition < 0 || toPosition < 0) return false;
+  orderedItems.splice(toPosition, 0, orderedItems.splice(fromPosition, 1)[0]);
+  resequenceCatalogCategory(movingItem.cat, orderedItems);
+  save();
+  return true;
+}
+
+function moveCatalogItemByOffset(index, offset) {
+  const item = db.catalog[index];
+  if (!item) return false;
+  const entries = orderedCatalogEntries(item.cat);
+  const position = entries.findIndex(entry => entry.index === index);
+  const target = entries[position + offset];
+  return target ? moveCatalogItem(index, target.index) : false;
+}
+
 function partsTotal() {
   return selectedParts.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.qty || 1), 0);
 }
@@ -647,9 +690,8 @@ function renderPartsPicker() {
   if (!currentPartCat || !cats.includes(currentPartCat)) currentPartCat = cats[0] || "";
 
   tabs.innerHTML = cats.map(cat => `<button type="button" class="parts-tab ${cat === currentPartCat ? "active" : ""}" data-cat="${esc(cat)}">${esc(cat)}</button>`).join("");
-  grid.innerHTML = db.catalog
-    .filter(item => item.cat === currentPartCat)
-    .map(item => `<button type="button" class="part-btn" data-part="${esc(item.name)}" data-price="${Number(item.price || 0)}" data-catalog-index="${db.catalog.indexOf(item)}"><b>${esc(item.name)}</b><span>${money(item.price)}</span></button>`)
+  grid.innerHTML = orderedCatalogEntries(currentPartCat)
+    .map(({ item, index }) => `<button type="button" class="part-btn" data-part="${esc(item.name)}" data-price="${Number(item.price || 0)}" data-catalog-index="${index}"><b>${esc(item.name)}</b><span>${money(item.price)}</span></button>`)
     .join("") || `<p class="muted">查無歷史維修紀錄</p>`;
 }
 
@@ -1252,7 +1294,7 @@ function renderItemManager() {
   if (!list) return;
   const cats = getPartCats();
   if (!currentPartCat || !cats.includes(currentPartCat)) currentPartCat = cats[0] || "";
-  const activeItems = db.catalog.filter(item => item.cat === currentPartCat);
+  const activeItems = orderedCatalogEntries(currentPartCat);
   list.innerHTML = `
     <div class="item-maintenance ymmis-item-maintenance">
       <aside class="major-panel ymmis-category-panel">
@@ -1291,9 +1333,9 @@ function renderItemManager() {
           <button id="addItemBtn" type="button">新增項目</button>
         </div>
         <div class="minor-list ymmis-item-grid">
-          ${activeItems.map(item => {
-            const index = db.catalog.indexOf(item);
-            return `<div class="minor-item compact" data-index="${index}">
+          ${activeItems.map(({ item, index }) => {
+            return `<div class="minor-item compact" data-index="${index}" data-cat="${esc(item.cat)}">
+              <button type="button" class="minor-drag-handle" data-index="${index}" aria-label="拖曳移動 ${esc(item.name)}" title="按住拖曳移動">↕</button>
               <div class="minor-display">
                 <b>${esc(item.name)}｜售價 ${money(item.price)}｜成本 ${money(item.cost)}</b>
               </div>
@@ -1303,6 +1345,8 @@ function renderItemManager() {
                 <input class="catalog-cost" data-index="${index}" type="number" min="0" value="${Number(item.cost || 0)}" aria-label="內部成本">
               </div>
               <div class="minor-actions">
+                <button type="button" class="secondary moveMinorItem" data-index="${index}" data-offset="-1" aria-label="向前移動" title="向前移動">←</button>
+                <button type="button" class="secondary moveMinorItem" data-index="${index}" data-offset="1" aria-label="向後移動" title="向後移動">→</button>
                 <button type="button" class="secondary toggleMinorEdit" data-index="${index}">修改</button>
                 <button type="button" class="catalog-del deleteItem" data-index="${index}">刪除</button>
               </div>
@@ -1732,6 +1776,12 @@ function mergeSyncRecords(type, remoteItems, localItems) {
   [...(Array.isArray(remoteItems) ? remoteItems : []), ...(Array.isArray(localItems) ? localItems : [])]
     .forEach((item, index) => {
       const key = syncRecordKey(type, item) || `__${type}_${index}`;
+      const existing = merged.get(key);
+      if (type === "catalog" && existing) {
+        const existingTime = Date.parse(existing.updatedAt || "") || 0;
+        const incomingTime = Date.parse(item.updatedAt || "") || 0;
+        if (existingTime > incomingTime) return;
+      }
       merged.set(key, item);
     });
   return [...merged.values()];
@@ -2177,7 +2227,9 @@ document.addEventListener("click", event => {
       cat,
       name,
       price: Number($("#newItemPrice").value || 0),
-      cost: Number($("#newItemCost").value || 0)
+      cost: Number($("#newItemCost").value || 0),
+      sortOrder: orderedCatalogEntries(cat).length,
+      updatedAt: new Date().toISOString()
     });
     $("#newItemName").value = "";
     $("#newItemPrice").value = "";
@@ -2209,6 +2261,10 @@ document.addEventListener("click", event => {
       renderPartsPicker();
       renderItemManager();
     }
+  }
+  const moveMinorItem = event.target.closest(".moveMinorItem");
+  if (moveMinorItem) {
+    moveCatalogItemByOffset(Number(moveMinorItem.dataset.index), Number(moveMinorItem.dataset.offset));
   }
   const minorItem = event.target.closest(".minor-item");
   if (minorItem && !event.target.closest("button,input")) {
@@ -2307,6 +2363,50 @@ document.addEventListener("click", event => {
   }
 });
 
+document.addEventListener("pointerdown", event => {
+  const handle = event.target.closest(".minor-drag-handle");
+  if (!handle || (event.button !== undefined && event.button !== 0)) return;
+  event.preventDefault();
+  draggingCatalogIndex = Number(handle.dataset.index);
+  catalogPointerDrag = { pointerId: event.pointerId, handle };
+  const row = handle.closest(".minor-item");
+  row?.classList.add("dragging");
+  handle.setPointerCapture?.(event.pointerId);
+});
+
+document.addEventListener("pointermove", event => {
+  if (!catalogPointerDrag || event.pointerId !== catalogPointerDrag.pointerId) return;
+  const row = document.elementFromPoint(event.clientX, event.clientY)?.closest(".minor-item");
+  const movingItem = db.catalog[draggingCatalogIndex];
+  const targetItem = db.catalog[Number(row?.dataset.index)];
+  if (!row || !movingItem || !targetItem || movingItem.cat !== targetItem.cat) return;
+  event.preventDefault();
+  $$(".minor-item.drag-over").forEach(item => item.classList.remove("drag-over"));
+  if (Number(row.dataset.index) !== draggingCatalogIndex) row.classList.add("drag-over");
+});
+
+document.addEventListener("pointerup", event => {
+  if (!catalogPointerDrag || event.pointerId !== catalogPointerDrag.pointerId) return;
+  event.preventDefault();
+  const row = document.elementFromPoint(event.clientX, event.clientY)?.closest(".minor-item");
+  const sourceIndex = draggingCatalogIndex;
+  const targetIndex = Number(row?.dataset.index);
+  catalogPointerDrag.handle.releasePointerCapture?.(event.pointerId);
+  catalogPointerDrag = null;
+  draggingCatalogIndex = null;
+  $$(".minor-item.drag-over").forEach(item => item.classList.remove("drag-over"));
+  $$(".minor-item.dragging").forEach(item => item.classList.remove("dragging"));
+  if (row && Number.isInteger(targetIndex)) moveCatalogItem(sourceIndex, targetIndex);
+});
+
+document.addEventListener("pointercancel", event => {
+  if (!catalogPointerDrag || event.pointerId !== catalogPointerDrag.pointerId) return;
+  catalogPointerDrag.handle.releasePointerCapture?.(event.pointerId);
+  catalogPointerDrag = null;
+  draggingCatalogIndex = null;
+  $$(".minor-item.dragging,.minor-item.drag-over").forEach(item => item.classList.remove("dragging", "drag-over"));
+});
+
 document.addEventListener("input", event => {
   if (event.isComposing && event.target.matches(".catalog-name")) return;
   if (event.target.id === "plate") {
@@ -2331,16 +2431,19 @@ document.addEventListener("input", event => {
   }
   if (event.target.matches(".catalog-name") && db.catalog[index]) {
     db.catalog[index].name = event.target.value;
+    db.catalog[index].updatedAt = new Date().toISOString();
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
   }
   if (event.target.matches(".catalog-price") && db.catalog[index]) {
     db.catalog[index].price = Number(event.target.value || 0);
+    db.catalog[index].updatedAt = new Date().toISOString();
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
   }
   if (event.target.matches(".catalog-cost") && db.catalog[index]) {
     db.catalog[index].cost = Number(event.target.value || 0);
+    db.catalog[index].updatedAt = new Date().toISOString();
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
   }
@@ -2350,6 +2453,7 @@ document.addEventListener("compositionend", event => {
   const index = Number(event.target.dataset.index);
   if (event.target.matches(".catalog-name") && db.catalog[index]) {
     db.catalog[index].name = event.target.value;
+    db.catalog[index].updatedAt = new Date().toISOString();
     localStorage.setItem(KEY, JSON.stringify(db));
   }
 });
