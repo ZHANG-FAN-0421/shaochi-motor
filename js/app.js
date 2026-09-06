@@ -12,6 +12,7 @@ const SYNC_REVISION = "shaochi_cloud_revision";
 const SYNC_BACKUP = "shaochi_cloud_recovery_backup";
 const CLOUD_META_KEY = "_shaochiSyncMeta";
 const CLOUD_META_CATALOG_MARKER = "__shaochi_cloud_meta__";
+const CATALOG_SYNC_STATE_KEY = "_catalogSyncState";
 const INVENTORY_STORAGE_KEY = "motorcycle-shop-inventory-v1";
 const INVENTORY_LOG_KEY = "motorcycle-shop-inventory-logs-v1";
 const INVENTORY_SYNC_KEY = "qidian-inventory-cloud-sync-v1";
@@ -386,6 +387,107 @@ function normalizeCatalogItem(item, index = 0) {
   };
 }
 
+function catalogItemKey(item) {
+  return `${item?.cat || ""}\u0000${item?.name || ""}`;
+}
+
+function normalizeTimestampMap(value) {
+  const normalized = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return normalized;
+  Object.entries(value).forEach(([key, timestamp]) => {
+    if (key && Date.parse(String(timestamp || ""))) normalized[key] = String(timestamp);
+  });
+  return normalized;
+}
+
+function catalogSyncState(settings = db.settings) {
+  const source = settings?.[CATALOG_SYNC_STATE_KEY];
+  return {
+    deletedItems: normalizeTimestampMap(source?.deletedItems),
+    deletedCategories: normalizeTimestampMap(source?.deletedCategories),
+    categoryUpdatedAt: normalizeTimestampMap(source?.categoryUpdatedAt)
+  };
+}
+
+function mergeTimestampMaps(remoteMap, localMap) {
+  const merged = {};
+  [normalizeTimestampMap(remoteMap), normalizeTimestampMap(localMap)].forEach(source => {
+    Object.entries(source).forEach(([key, timestamp]) => {
+      if ((Date.parse(timestamp) || 0) >= (Date.parse(merged[key] || "") || 0)) merged[key] = timestamp;
+    });
+  });
+  return merged;
+}
+
+function mergeCatalogSyncState(remoteSettings, localSettings) {
+  const remote = catalogSyncState(remoteSettings);
+  const local = catalogSyncState(localSettings);
+  return {
+    deletedItems: mergeTimestampMaps(remote.deletedItems, local.deletedItems),
+    deletedCategories: mergeTimestampMaps(remote.deletedCategories, local.deletedCategories),
+    categoryUpdatedAt: mergeTimestampMaps(remote.categoryUpdatedAt, local.categoryUpdatedAt)
+  };
+}
+
+function writeCatalogSyncState(state) {
+  if (!db.settings || typeof db.settings !== "object") db.settings = {};
+  db.settings[CATALOG_SYNC_STATE_KEY] = state;
+}
+
+function touchCatalogCategory(cat, timestamp = new Date().toISOString()) {
+  if (!cat) return;
+  const state = catalogSyncState();
+  state.categoryUpdatedAt[cat] = timestamp;
+  writeCatalogSyncState(state);
+}
+
+function markCatalogItemDeleted(item, timestamp = new Date().toISOString()) {
+  const key = catalogItemKey(item);
+  if (!item || !key) return;
+  const state = catalogSyncState();
+  state.deletedItems[key] = timestamp;
+  writeCatalogSyncState(state);
+}
+
+function markCatalogCategoryDeleted(cat, items, timestamp = new Date().toISOString()) {
+  if (!cat) return;
+  const state = catalogSyncState();
+  state.deletedCategories[cat] = timestamp;
+  (Array.isArray(items) ? items : []).forEach(item => {
+    state.deletedItems[catalogItemKey(item)] = timestamp;
+  });
+  writeCatalogSyncState(state);
+}
+
+function applyCatalogDeletionState(data) {
+  if (!data || typeof data !== "object") return data;
+  if (!data.settings || typeof data.settings !== "object") data.settings = {};
+  const state = catalogSyncState(data.settings);
+  data.settings[CATALOG_SYNC_STATE_KEY] = state;
+  const sourceCatalog = Array.isArray(data.catalog) ? data.catalog : [];
+  data.catalog = sourceCatalog.filter(item => {
+    const itemUpdatedAt = Date.parse(item?.updatedAt || "") || 0;
+    const itemDeletedAt = Date.parse(state.deletedItems[catalogItemKey(item)] || "") || 0;
+    const categoryDeletedAt = Date.parse(state.deletedCategories[item?.cat] || "") || 0;
+    const deletedAt = Math.max(itemDeletedAt, categoryDeletedAt);
+    return !deletedAt || itemUpdatedAt > deletedAt;
+  });
+  const categories = [...new Set([
+    ...(Array.isArray(data.categories) ? data.categories : []),
+    ...data.catalog.map(item => item.cat)
+  ].filter(Boolean))];
+  data.categories = categories.filter(cat => {
+    const deletedAt = Date.parse(state.deletedCategories[cat] || "") || 0;
+    if (!deletedAt) return true;
+    const categoryUpdatedAt = Date.parse(state.categoryUpdatedAt[cat] || "") || 0;
+    const latestItemAt = data.catalog
+      .filter(item => item.cat === cat)
+      .reduce((latest, item) => Math.max(latest, Date.parse(item.updatedAt || "") || 0), 0);
+    return Math.max(categoryUpdatedAt, latestItemAt) > deletedAt;
+  });
+  return data;
+}
+
 const pageTitles = {
   receive: "維修主畫面",
   appointments: "預約一覽",
@@ -426,6 +528,7 @@ function load() {
     active: employee.active !== false
   }));
   db.catalog = db.catalog.map(normalizeCatalogItem);
+  applyCatalogDeletionState(db);
   db.categories = [...new Set([...db.categories, ...db.catalog.map(item => item.cat)].filter(Boolean))];
   db.orders = db.orders.map(normalizeOrder);
   repairOrderNumbers();
@@ -582,6 +685,7 @@ function ensureAccessData() {
   const allowedPages = PERMISSIONS.map(item => item[0]);
   if (!Array.isArray(db.catalog)) db.catalog = defaultCatalog.slice();
   db.catalog = db.catalog.map(normalizeCatalogItem);
+  applyCatalogDeletionState(db);
   if (!Array.isArray(db.roles) || !db.roles.length) db.roles = DEFAULT_ROLES.map(role => ({ ...role, pages: role.pages.slice() }));
   DEFAULT_ROLES.forEach(defaultRole => {
     const existingRole = db.roles.find(role => role.id === defaultRole.id);
@@ -1765,7 +1869,7 @@ function syncRecordKey(type, item) {
   if (type === "orders") return String(item?.id || item?.orderNo || "");
   if (type === "customers") return String(item?.id || normalizePlate(item?.plate) || "");
   if (type === "appointments") return String(item?.id || "");
-  if (type === "catalog") return `${item?.cat || ""}\u0000${item?.name || ""}`;
+  if (type === "catalog") return catalogItemKey(item);
   if (type === "employees") return String(item?.username || item?.id || "");
   if (type === "roles") return String(item?.id || "");
   return "";
@@ -1798,7 +1902,8 @@ function mergeCloudData(remoteData, localData) {
       ? remoteInventory
       : localInventory;
   }
-  return {
+  settings[CATALOG_SYNC_STATE_KEY] = mergeCatalogSyncState(remoteSettings, localSettings);
+  return applyCatalogDeletionState({
     orders: mergeSyncRecords("orders", remoteData.orders, localData.orders),
     customers: mergeSyncRecords("customers", remoteData.customers, localData.customers),
     appointments: mergeSyncRecords("appointments", remoteData.appointments, localData.appointments),
@@ -1807,7 +1912,7 @@ function mergeCloudData(remoteData, localData) {
     employees: mergeSyncRecords("employees", remoteData.employees, localData.employees),
     roles: mergeSyncRecords("roles", remoteData.roles, localData.roles),
     settings
-  };
+  });
 }
 
 function hasLocalOnlySyncData(remoteData, localData) {
@@ -1884,7 +1989,7 @@ function normalizeCloudResponse(payload) {
     orders: Array.isArray(source?.orders) ? source.orders.map(normalizeOrder) : [],
     customers: Array.isArray(source?.customers) ? source.customers.map(normalizeCustomer) : [],
     appointments: Array.isArray(appointments) ? appointments.map(normalizeAppointment) : [],
-    catalog: catalog.length ? catalog : defaultCatalog.slice(),
+    catalog: Array.isArray(source.catalog) ? catalog : defaultCatalog.slice(),
     categories: [...new Set([...(Array.isArray(categories) ? categories : []), ...catalog.map(item => item.cat)].filter(Boolean))],
     employees: Array.isArray(employees) ? employees : [],
     roles: Array.isArray(roles) ? roles : [],
@@ -2214,6 +2319,7 @@ document.addEventListener("click", event => {
     if (!name) return alert("請輸入大項目名稱");
     if (!db.categories) db.categories = [];
     if (!getPartCats().includes(name)) db.categories.push(name);
+    touchCatalogCategory(name);
     currentPartCat = name;
     $("#newCatName").value = "";
     save();
@@ -2223,14 +2329,16 @@ document.addEventListener("click", event => {
     const cat = currentPartCat || $("#itemCatSelect")?.value || "";
     if (!cat) return alert("請先新增大項目");
     if (!name) return alert("請輸入小項目名稱");
+    const updatedAt = new Date().toISOString();
     db.catalog.push({
       cat,
       name,
       price: Number($("#newItemPrice").value || 0),
       cost: Number($("#newItemCost").value || 0),
       sortOrder: orderedCatalogEntries(cat).length,
-      updatedAt: new Date().toISOString()
+      updatedAt
     });
+    touchCatalogCategory(cat, updatedAt);
     $("#newItemName").value = "";
     $("#newItemPrice").value = "";
     $("#newItemCost").value = "";
@@ -2238,14 +2346,20 @@ document.addEventListener("click", event => {
   }
   const deleteItem = event.target.closest(".deleteItem");
   if (deleteItem) {
-    db.catalog.splice(Number(deleteItem.dataset.index), 1);
+    const index = Number(deleteItem.dataset.index);
+    const item = db.catalog[index];
+    if (!item) return;
+    markCatalogItemDeleted(item);
+    db.catalog.splice(index, 1);
     save();
   }
   const deleteCat = event.target.closest(".deleteCat");
   if (deleteCat) {
     const cat = deleteCat.dataset.cat;
-    const count = db.catalog.filter(item => item.cat === cat).length;
+    const categoryItems = db.catalog.filter(item => item.cat === cat);
+    const count = categoryItems.length;
     if (!confirm(`確定刪除「${cat}」大項目？底下 ${count} 個小項目也會一起刪除。`)) return;
+    markCatalogCategoryDeleted(cat, categoryItems);
     db.catalog = db.catalog.filter(item => item.cat !== cat);
     db.categories = (db.categories || []).filter(item => item !== cat);
     currentPartCat = getPartCats()[0] || "";
@@ -2430,8 +2544,12 @@ document.addEventListener("input", event => {
     return;
   }
   if (event.target.matches(".catalog-name") && db.catalog[index]) {
-    db.catalog[index].name = event.target.value;
-    db.catalog[index].updatedAt = new Date().toISOString();
+    const item = db.catalog[index];
+    const nextName = event.target.value;
+    if (item.name !== nextName) markCatalogItemDeleted({ ...item });
+    item.name = nextName;
+    item.updatedAt = new Date().toISOString();
+    touchCatalogCategory(item.cat, item.updatedAt);
     localStorage.setItem(KEY, JSON.stringify(db));
     return;
   }
@@ -2452,8 +2570,12 @@ document.addEventListener("input", event => {
 document.addEventListener("compositionend", event => {
   const index = Number(event.target.dataset.index);
   if (event.target.matches(".catalog-name") && db.catalog[index]) {
-    db.catalog[index].name = event.target.value;
-    db.catalog[index].updatedAt = new Date().toISOString();
+    const item = db.catalog[index];
+    const nextName = event.target.value;
+    if (item.name !== nextName) markCatalogItemDeleted({ ...item });
+    item.name = nextName;
+    item.updatedAt = new Date().toISOString();
+    touchCatalogCategory(item.cat, item.updatedAt);
     localStorage.setItem(KEY, JSON.stringify(db));
   }
 });
@@ -2461,7 +2583,10 @@ document.addEventListener("compositionend", event => {
 document.addEventListener("change", event => {
   if (event.target.id === "orderDateFilter") renderOrders();
   if (event.target.id === "itemCatSelect") currentPartCat = event.target.value;
-  if (event.target.matches(".catalog-name,.catalog-price,.catalog-cost")) renderPartsPicker();
+  if (event.target.matches(".catalog-name,.catalog-price,.catalog-cost")) {
+    renderPartsPicker();
+    queueCloudUpload();
+  }
   if (event.target.id === "printDocType") {
     const sheet = $(".print-sheet");
     const order = db.orders.find(item => item.id === sheet?.dataset.orderId);
